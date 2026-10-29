@@ -1,4 +1,5 @@
 # Kirameku production deploy (CI build + rsync). Workflow-only pushes run both jobs.
+# Re-trigger after SSH_* repository secrets were configured (2026-10-29).
 name: Deploy Kirameku
 
 on:
