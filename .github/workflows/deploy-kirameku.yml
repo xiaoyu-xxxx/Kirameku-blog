@@ -1,3 +1,4 @@
+# Kirameku production deploy (CI build + rsync). Workflow-only pushes run both jobs.
 name: Deploy Kirameku
 
 on:
@@ -6,6 +7,7 @@ on:
     paths:
       - "Kirameku/**"
       - "Kirameku-backend/**"
+      - "deploy/**"
       - ".github/workflows/deploy-kirameku.yml"
   workflow_dispatch:
 
@@ -18,8 +20,38 @@ env:
   REMOTE_BACKEND: /home/blog-deploy/apps/kirameku/backend
 
 jobs:
+  detect-changes:
+    name: Detect path changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      backend: ${{ steps.changes.outputs.backend }}
+      workflow: ${{ steps.changes.outputs.workflow }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Paths filter
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            frontend:
+              - 'Kirameku/**'
+              - 'deploy/restart-frontend.sh'
+            backend:
+              - 'Kirameku-backend/**'
+              - 'deploy/restart-backend.sh'
+            workflow:
+              - '.github/workflows/deploy-kirameku.yml'
+
   deploy-frontend:
     name: Frontend (Next.js)
+    needs: detect-changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.frontend == 'true' ||
+      needs.detect-changes.outputs.workflow == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -94,6 +126,11 @@ jobs:
 
   deploy-backend:
     name: Backend (FastAPI + admin)
+    needs: detect-changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.backend == 'true' ||
+      needs.detect-changes.outputs.workflow == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
