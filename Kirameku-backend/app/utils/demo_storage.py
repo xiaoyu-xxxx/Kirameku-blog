@@ -1,3 +1,11 @@
+"""Demo case static file storage.
+
+Default (``DEMO_STORAGE=local``): write under ``DEMO_LOCAL_ROOT`` on the server.
+``DEMO_PUBLIC_BASE`` (e.g. https://demos.xiaoyu-hh.cn) should serve those files via nginx/CDN.
+Do not use R2 for new demo uploads; keep the R2 ``demos/`` prefix empty.
+``DEMO_STORAGE=r2`` remains for legacy cleanup only.
+"""
+
 from pathlib import Path
 
 import boto3

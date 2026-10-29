@@ -220,8 +220,13 @@ onMounted(onSearch);
 
     <el-card shadow="never">
       <template #header>
-        <div class="flex justify-between items-center">
-          <span class="font-medium">案例 Demo 管理</span>
+        <div class="flex justify-between items-center flex-wrap gap-2">
+          <div>
+            <span class="font-medium">案例 Demo 管理</span>
+            <p class="text-xs text-gray-500 mt-1 font-normal">
+              zip 解压到服务器本地目录（DEMO_LOCAL_ROOT），经 demos 子域对外；请勿使用 R2 存放 demo 包。
+            </p>
+          </div>
           <el-button
             type="primary"
             :icon="useRenderIcon('ri:add-line')"
@@ -298,7 +303,8 @@ onMounted(onSearch);
             :disabled="!!form.id && form.file_count > 0"
           />
           <p v-if="form.id" class="text-xs text-gray-400 mt-1">
-            已上传包后不可改 slug；路径为 demos.xiaoyu-hh.cn/&lt;slug&gt;/…
+            已上传包后不可改 slug；文件在服务器 DEMO_LOCAL_ROOT/&lt;slug&gt;/，公开路径为
+            demos.xiaoyu-hh.cn/&lt;slug&gt;/…
           </p>
         </el-form-item>
         <el-form-item label="入口文件">
