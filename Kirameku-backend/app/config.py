@@ -77,9 +77,10 @@ OSS_REGION = CLOUDFLARE_REGION
 OSS_PHOTOWALL_PREFIX = PHOTOWALL_PREFIX
 
 # Demo case packages (interactive iframe demos on demos.* subdomain)
-DEMO_STORAGE = os.getenv("DEMO_STORAGE", "r2").strip().lower()  # r2 | local
+# Production: static files on server disk (DEMO_LOCAL_ROOT), not R2.
+DEMO_STORAGE = os.getenv("DEMO_STORAGE", "local").strip().lower()  # local | r2 (legacy)
 DEMO_PUBLIC_BASE = os.getenv("DEMO_PUBLIC_BASE", "https://demos.xiaoyu-hh.cn").rstrip("/")
-DEMO_R2_PREFIX = os.getenv("DEMO_R2_PREFIX", "demos/")
+DEMO_R2_PREFIX = os.getenv("DEMO_R2_PREFIX", "demos/")  # only when DEMO_STORAGE=r2 (discouraged)
 DEMO_LOCAL_ROOT = Path(
     os.getenv("DEMO_LOCAL_ROOT", str(BASE_DIR / "uploads" / "demos"))
 )
