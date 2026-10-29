@@ -5,7 +5,8 @@ import { message } from "@/utils/message";
 import {
   getPostById,
   createPost,
-  updatePost
+  updatePost,
+  extractPostFromUrl
 } from "@/api/post";
 import { uploadImage } from "@/api/album";
 import { getCategories } from "@/api/category";
@@ -46,6 +47,9 @@ const tagInputVisible = ref(false);
 const tagInputValue = ref("");
 const coverUploading = ref(false);
 const coverInputRef = ref<HTMLInputElement>();
+const extractUrl = ref("");
+const extractUseJina = ref(false);
+const extracting = ref(false);
 
 const rules = {
   title: [{ required: true, message: "请输入标题", trigger: "blur" }],
@@ -93,6 +97,28 @@ async function handleCoverUpload(event: Event) {
   } finally {
     coverUploading.value = false;
     input.value = "";
+  }
+}
+
+async function handleExtractFromUrl() {
+  const url = extractUrl.value.trim();
+  if (!url) {
+    message("请输入文章 URL", { type: "warning" });
+    return;
+  }
+  extracting.value = true;
+  try {
+    const res = await extractPostFromUrl({ url, useJina: extractUseJina.value });
+    if (res.title) form.value.title = res.title;
+    if (res.description) form.value.description = res.description;
+    if (res.content) form.value.content = res.content;
+    if (res.cover) form.value.cover = res.cover;
+    autoSlug();
+    message(`提取完成（来源：${res.source || "http"}）`, { type: "success" });
+  } catch (e: any) {
+    message(e?.message ?? "提取失败", { type: "error" });
+  } finally {
+    extracting.value = false;
   }
 }
 
@@ -175,6 +201,25 @@ onMounted(async () => {
         label-width="100px"
         class="max-w-5xl"
       >
+        <el-form-item label="从 URL 提取">
+          <div class="flex flex-wrap gap-2 w-full items-center">
+            <el-input
+              v-model="extractUrl"
+              placeholder="粘贴原文链接，识别标题/摘要/正文/封面"
+              class="flex-1 min-w-[240px]"
+            />
+            <el-checkbox v-model="extractUseJina">Jina 增强</el-checkbox>
+            <el-button
+              type="primary"
+              plain
+              :loading="extracting"
+              @click="handleExtractFromUrl"
+            >
+              识别 / 提取
+            </el-button>
+          </div>
+        </el-form-item>
+
         <el-form-item label="标题" prop="title">
           <el-input
             v-model="form.title"

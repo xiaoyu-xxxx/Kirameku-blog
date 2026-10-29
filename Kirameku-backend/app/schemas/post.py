@@ -51,3 +51,17 @@ class PostOut(BaseModel):
 
 class PostDetail(PostOut):
     content: str
+
+
+class PostExtractRequest(BaseModel):
+    url: str
+    useJina: bool = False
+
+
+class PostExtractOut(BaseModel):
+    title: str = ""
+    description: str = ""
+    content: str = ""
+    cover: str = ""
+    images: list[str] = []
+    source: str = ""

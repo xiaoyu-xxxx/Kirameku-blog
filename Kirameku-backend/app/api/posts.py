@@ -1,12 +1,27 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlmodel import Session
 
 from app.deps import get_session
-from app.schemas import PostCreate, PostUpdate, PostOut, PostDetail
+from app.schemas import PostCreate, PostUpdate, PostOut, PostDetail, PostExtractRequest, PostExtractOut
 from app.services import post_service
 from app.deps import get_current_user
+from app.utils.extract_article import extract_article_from_url
 
 router = APIRouter(prefix="/api/posts", tags=["文章"])
+
+
+@router.post("/extract", response_model=PostExtractOut)
+async def extract_post_from_url(
+    body: PostExtractRequest,
+    _: dict = Depends(get_current_user),
+):
+    try:
+        result = await extract_article_from_url(body.url, use_jina=body.useJina)
+        return PostExtractOut(**result)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(400, f"提取失败: {exc}") from exc
 
 
 @router.get("", response_model=list[PostOut])
