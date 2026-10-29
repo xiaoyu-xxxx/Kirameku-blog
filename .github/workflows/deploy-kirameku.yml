@@ -17,6 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  REMOTE_APP: /home/blog-deploy/apps/kirameku
   REMOTE_FRONTEND: /home/blog-deploy/apps/kirameku/frontend
   REMOTE_BACKEND: /home/blog-deploy/apps/kirameku/backend
 
@@ -109,11 +110,9 @@ jobs:
           rsync -avzr --delete \
             -e "$RSYNC_RSH" \
             --exclude '.git' \
-            .next/ public/ package.json pnpm-lock.yaml next.config.ts node_modules/ \
+            --exclude 'cache/' \
+            .next/ public/ package.json pnpm-lock.yaml next.config.ts \
             "$REMOTE"
-          rsync -avz -e "$RSYNC_RSH" \
-            ../deploy/restart-frontend.sh \
-            "${SSH_USER}@${SSH_HOST}:${REMOTE_FRONTEND}/restart-frontend.sh"
 
       - name: Restart frontend on server
         env:
@@ -123,7 +122,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
             "${SSH_USER}@${SSH_HOST}" \
-            "chmod +x ${REMOTE_FRONTEND}/restart-frontend.sh && ${REMOTE_FRONTEND}/restart-frontend.sh"
+            "bash ${REMOTE_APP}/restart-frontend.sh"
 
   deploy-backend:
     name: Backend (FastAPI + admin)
@@ -181,16 +180,17 @@ jobs:
           rsync -avzr --delete \
             -e "$RSYNC_RSH" \
             --exclude '.git' \
+            --exclude '.pip-packages/' \
             --exclude '.venv/' \
+            --exclude 'venv/' \
             --exclude '.env' \
+            --exclude 'logs/' \
+            --exclude 'uploads/' \
             --exclude 'admin/node_modules/' \
             --exclude '**/__pycache__/' \
             --exclude '**/*.pyc' \
             Kirameku-backend/ \
             "$REMOTE"
-          rsync -avz -e "$RSYNC_RSH" \
-            deploy/restart-backend.sh \
-            "${SSH_USER}@${SSH_HOST}:${REMOTE_BACKEND}/restart-backend.sh"
 
       - name: Restart backend on server
         env:
@@ -200,4 +200,4 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
             "${SSH_USER}@${SSH_HOST}" \
-            "chmod +x ${REMOTE_BACKEND}/restart-backend.sh && ${REMOTE_BACKEND}/restart-backend.sh"
+            "bash ${REMOTE_APP}/restart-backend.sh"
