@@ -1,5 +1,8 @@
 from app.schemas.auth import Token, LoginRequest
-from app.schemas.post import PostCreate, PostUpdate, PostOut, PostDetail
+from app.schemas.post import (
+    PostCreate, PostUpdate, PostOut, PostDetail,
+    PostExtractRequest, PostExtractOut,
+)
 from app.schemas.category import (
     CategoryCreate, CategoryUpdate, CategoryOut,
     TagCreate, TagUpdate, TagOut,
@@ -20,10 +23,14 @@ from app.schemas.bookmark import (
     BookmarkCategoryCreate, BookmarkCategoryUpdate, BookmarkCategoryOut,
     BookmarkSiteCreate, BookmarkSiteUpdate, BookmarkSiteOut, BookmarkFull,
 )
+from app.schemas.demo_case import (
+    DemoCaseCreate, DemoCaseUpdate, DemoCaseOut, DemoIframeOut,
+)
 
 __all__ = [
     "Token", "LoginRequest",
     "PostCreate", "PostUpdate", "PostOut", "PostDetail",
+    "PostExtractRequest", "PostExtractOut",
     "CategoryCreate", "CategoryUpdate", "CategoryOut",
     "TagCreate", "TagUpdate", "TagOut",
     "CommentCreate", "CommentOut", "CommentAdminUpdate",
@@ -37,4 +44,5 @@ __all__ = [
     "SiteConfigUpdate", "SiteConfigOut",
     "BookmarkCategoryCreate", "BookmarkCategoryUpdate", "BookmarkCategoryOut",
     "BookmarkSiteCreate", "BookmarkSiteUpdate", "BookmarkSiteOut", "BookmarkFull",
+    "DemoCaseCreate", "DemoCaseUpdate", "DemoCaseOut", "DemoIframeOut",
 ]

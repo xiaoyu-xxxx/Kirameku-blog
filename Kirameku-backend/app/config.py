@@ -75,3 +75,21 @@ OSS_CUSTOM_DOMAIN = CLOUDFLARE_PUBLIC_BASE_URL
 OSS_PREFIX = UPLOAD_PREFIX
 OSS_REGION = CLOUDFLARE_REGION
 OSS_PHOTOWALL_PREFIX = PHOTOWALL_PREFIX
+
+# Demo case packages (interactive iframe demos on demos.* subdomain)
+DEMO_STORAGE = os.getenv("DEMO_STORAGE", "r2").strip().lower()  # r2 | local
+DEMO_PUBLIC_BASE = os.getenv("DEMO_PUBLIC_BASE", "https://demos.xiaoyu-hh.cn").rstrip("/")
+DEMO_R2_PREFIX = os.getenv("DEMO_R2_PREFIX", "demos/")
+DEMO_LOCAL_ROOT = Path(
+    os.getenv("DEMO_LOCAL_ROOT", str(BASE_DIR / "uploads" / "demos"))
+)
+DEMO_MAX_ZIP_BYTES = int(os.getenv("DEMO_MAX_ZIP_BYTES", str(20 * 1024 * 1024)))
+DEMO_MAX_FILES = int(os.getenv("DEMO_MAX_FILES", "300"))
+DEMO_MAX_FILE_BYTES = int(os.getenv("DEMO_MAX_FILE_BYTES", str(5 * 1024 * 1024)))
+DEMO_UPLOAD_RATE_LIMIT = int(os.getenv("DEMO_UPLOAD_RATE_LIMIT", "10"))  # per hour per admin
+DEMO_UPLOAD_RATE_WINDOW = int(os.getenv("DEMO_UPLOAD_RATE_WINDOW", "3600"))
+
+# Article URL extract (optional Jina reader)
+JINA_READER_BASE = os.getenv("JINA_READER_BASE", "https://r.jina.ai").rstrip("/")
+EXTRACT_HTTP_TIMEOUT = float(os.getenv("EXTRACT_HTTP_TIMEOUT", "25"))
+EXTRACT_MAX_HTML_BYTES = int(os.getenv("EXTRACT_MAX_HTML_BYTES", str(5 * 1024 * 1024)))
