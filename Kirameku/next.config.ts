@@ -38,6 +38,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "picsum.photos" },
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
       { protocol: "http", hostname: "wfqqreader-1252317822.image.myqcloud.com" },
+      { protocol: "https", hostname: "img.xiaoyu-hh.cn" },
+      { protocol: "http", hostname: "img.xiaoyu-hh.cn" },
+      { protocol: "https", hostname: "xiaoyu-hh.cn" },
     ],
   },
 };
