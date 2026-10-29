@@ -6,6 +6,12 @@
 
 构建在 **GitHub-hosted runner** 完成；服务器（约 1.7GB RAM）只接收 rsync 产物并执行重启脚本，**不在服务器上执行 `pnpm build`（Next 与 admin 均在 CI 构建）**。
 
+### 前端 rsync 注意
+
+- 同步目录时用 **无尾斜杠** 的源路径（例如 `.next`、`public`），目标为 `…/frontend/`，这样远程保留 `frontend/.next/` 与 `frontend/public/`，不会把 `.next` 内容摊平到 `frontend` 根目录。
+- **不要**对 `frontend/` 根目录使用 `--delete`（会删掉远程 `node_modules`、日志等 CI 未上传的文件）。
+- 仅对 **`.next/`**、**`public/`**、**`node_modules/`** 子树使用 `--delete`（各自 rsync 命令内 scoped，不是 frontend 根）；`package.json`、`pnpm-lock.yaml`、`next.config.ts` 单独 rsync，不带 `--delete`。
+
 ## 仓库 Secrets
 
 与 blog 的 `deploy-blog.yml` 相同命名：
