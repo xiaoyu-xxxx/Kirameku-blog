@@ -1,3 +1,5 @@
+import { photowallUrl } from "@/lib/cdn";
+
 export interface Moment {
   id: string;
   content: string;
@@ -19,7 +21,7 @@ export const momentsData: Moment[] = [
   {
     id: "2",
     content: "下午拍了一组照片，夕阳真的太美了。光是调色就花了一个小时，但值得。",
-    images: ["/images/1.webp", "/images/42.webp"],
+    images: [photowallUrl("1.webp"), photowallUrl("42.webp")],
     mood: "满足",
     likes: 5,
     created_at: "2026-05-05T14:20:00",
@@ -55,7 +57,7 @@ export const momentsData: Moment[] = [
   {
     id: "7",
     content: "和朋友去了新开的咖啡店，拿铁拉花是一只猫，舍不得喝。",
-    images: ["/images/20.webp"],
+    images: [photowallUrl("20.webp")],
     mood: "☕",
     likes: 7,
     created_at: "2026-05-03T15:30:00",
@@ -70,7 +72,7 @@ export const momentsData: Moment[] = [
   {
     id: "9",
     content: "今天天气真好，适合出去走走。拍了几张照片，记录一下春天的尾巴。",
-    images: ["/images/36.webp", "/images/39.webp", "/images/41.webp"],
+    images: [photowallUrl("36.webp"), photowallUrl("39.webp"), photowallUrl("41.webp")],
     mood: "🌸",
     likes: 10,
     created_at: "2026-05-02T10:20:00",

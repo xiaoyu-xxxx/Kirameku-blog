@@ -1,7 +1,7 @@
 ---
 title: "从零搭建一个全栈博客：Next.js + FastAPI + vue-pure-admin"
 description: "记录我用 Next.js 16、FastAPI、SQLModel 和 vue-pure-admin 搭建个人博客的全过程，包含前后端分离、管理后台、对象存储、部署上线等环节。"
-cover: "/images/default-cover.jpg"
+cover: "https://img.xiaoyu-hh.cn/photowall/default-cover.jpg"
 category: "技术"
 tags: ["Next.js", "FastAPI", "SQLModel", "vue-pure-admin", "全栈"]
 status: "published"

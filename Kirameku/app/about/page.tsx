@@ -8,12 +8,13 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeStringify from "rehype-stringify";
 import "highlight.js/styles/atom-one-dark.css";
 import { siteConfig } from "@/siteConfig";
+import { photowallUrl } from "@/lib/cdn";
 import FadeIn from "@/components/ui/FadeIn";
 
 export default async function AboutPage() {
   const fullPath = path.join(process.cwd(), "app", "about", "about.md");
   let contentHtml = "博主很懒，还没有写自我介绍哦...";
-  let coverImage = "/images/2.webp";
+  let coverImage = photowallUrl("2.webp");
 
   try {
     const fileContents = fs.readFileSync(fullPath, "utf8");

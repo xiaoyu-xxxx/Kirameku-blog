@@ -1,3 +1,5 @@
+import { photowallUrl } from "@/lib/cdn";
+
 // siteConfig.ts - 全站配置中心
 
 export const siteConfig = {
@@ -8,25 +10,25 @@ export const siteConfig = {
   bio: "项目开源在 GitHub,点击下面的GitHub图标跳转,欢迎 star 和 fork！(◕‿◕)",
 
   // 头像设置
-  avatarUrl: "/images/hong.jpg",
+  avatarUrl: photowallUrl("hong.jpg"),
 
   // 背景设置
   useGradient: false,
   themeColors: ["#a18cd1", "#fbc2eb", "#a1c4fd", "#c2e9fb"],
   bgImages: [
-    "/images/1.webp",
-    "/images/42.webp",
-    "/images/20.webp",
-    "/images/36.webp",
-    "/images/39.webp",
-    "/images/41.webp",
+    photowallUrl("1.webp"),
+    photowallUrl("42.webp"),
+    photowallUrl("20.webp"),
+    photowallUrl("36.webp"),
+    photowallUrl("39.webp"),
+    photowallUrl("41.webp"),
   ],
 
   // 默认封面图
-  defaultPostCover: "/images/default-cover.jpg",
+  defaultPostCover: photowallUrl("default-cover.jpg"),
 
-  // 照片墙预览图
-  photoWallImage: "/images/photo-wall.jpg",
+  // 照片墙预览图（R2 无 photo-wall.jpg，沿用运维 10.jpg 占位）
+  photoWallImage: photowallUrl("10.jpg"),
 
   // 云音乐配置（网易云音乐）
   // 填歌单 ID 则自动拉取整个歌单，填歌曲 ID 列表则只播放指定歌曲
