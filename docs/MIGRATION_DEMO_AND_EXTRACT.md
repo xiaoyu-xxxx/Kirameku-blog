@@ -1,6 +1,13 @@
 # Demo 案例 & URL 文章提取 — 迁移说明
 
-本仓库自旧 monorepo `blog` 移植两项能力：**案例 Demo 管理**（zip → demos 子域 → 文章 iframe）与 **URL 识别/提取**（Readability + 可选 Jina，图片走现有 R2 上传）。
+本仓库自旧 monorepo `blog` 移植两项能力：**案例 Demo 管理**（zip → 服务器本地目录 → demos 子域 → 文章 iframe）与 **URL 识别/提取**（Readability + 可选 Jina，图片走现有 R2 上传）。
+
+## Demo 静态文件存放（重要）
+
+- **生产默认**：`DEMO_STORAGE=local`。上传的 zip 解压到服务器 **`DEMO_LOCAL_ROOT`**（例如 `/var/www/kirameku/uploads/demos/<slug>/`）。
+- **公开访问**：`DEMO_PUBLIC_BASE=https://demos.xiaoyu-hh.cn` 由 nginx（或等价反向代理）**直接映射本地目录**，不是 R2 公共桶。
+- **请勿**将新的 demo 包上传到 Cloudflare R2；R2 桶内 **`demos/` 前缀应保持为空**（仅文章/照片墙等仍走 R2）。
+- `DEMO_STORAGE=r2` 仅作历史兼容，**不推荐**用于生产或新上传。
 
 ## 数据库
 
@@ -41,16 +48,16 @@ SELECT
 FROM blog_demo_case;
 ```
 
-静态文件仍在 R2/OSS 的 `demos/<slug>/` 前缀下时，**无需重新上传 zip**，只需导入元数据并保证 `DEMO_PUBLIC_BASE` 与 CDN 一致。
+若旧环境曾把静态文件放在 R2/OSS 的 `demos/<slug>/` 下，需**将对象同步到服务器 `DEMO_LOCAL_ROOT/<slug>/`**（或管理端重新上传 zip），并保证 `DEMO_PUBLIC_BASE` 指向本地静态服务。不要继续依赖 R2 上的 demo 对象。
 
 ## 环境变量（`Kirameku-backend/.env`）
 
 | 变量 | 说明 | 默认 |
 |------|------|------|
-| `DEMO_STORAGE` | `r2` 或 `local` | `r2` |
+| `DEMO_STORAGE` | `local`（推荐）或 legacy `r2` | `local` |
 | `DEMO_PUBLIC_BASE` | iframe 公开 URL 前缀 | `https://demos.xiaoyu-hh.cn` |
-| `DEMO_R2_PREFIX` | R2 对象前缀 | `demos/` |
-| `DEMO_LOCAL_ROOT` | 本地调试目录 | `./uploads/demos` |
+| `DEMO_LOCAL_ROOT` | 服务器上 demo 包根目录 | `./uploads/demos` |
+| `DEMO_R2_PREFIX` | 仅 `DEMO_STORAGE=r2` 时使用（不推荐） | `demos/` |
 | `DEMO_MAX_ZIP_BYTES` | zip 大小上限 | 20MB |
 | `DEMO_MAX_FILES` | 单包文件数上限 | 300 |
 | `DEMO_UPLOAD_RATE_LIMIT` | 每管理员每小时上传次数 | 10 |
@@ -70,7 +77,7 @@ FROM blog_demo_case;
 
 ## 管理端
 
-- 菜单 **案例 Demo**：创建 slug、上传 zip、复制 iframe HTML。
+- 菜单 **案例 Demo**：创建 slug、上传 zip（写入服务器 `DEMO_LOCAL_ROOT`）、复制 iframe HTML。
 - **写文章 / 编辑文章**：顶部「从 URL 提取」+ 可选「Jina 增强」。
 
 iframe 默认：`sandbox="allow-scripts allow-forms"`（不含 `allow-same-origin`）。
@@ -81,17 +88,17 @@ iframe 默认：`sandbox="allow-scripts allow-forms"`（不含 `allow-same-origi
 
 `https://demos.xiaoyu-hh.cn/css-has-form/index.html?embed=1`
 
-## Ops：demos 子域（当前 525 / X-Frame-Options）
+## Ops：demos 子域（525 / X-Frame-Options）
 
 代码侧已按 `demos.xiaoyu-hh.cn/<slug>/…` 生成 URL；**恢复线上需运维**：
 
-1. 修复 Cloudflare → 源站 **525**（源站/nginx 或 R2 公共访问策略）。
-2. 对 **demos** 虚拟主机响应头（便于从 `blog.xiaoyu-hh.cn` 嵌入）：
+1. 修复 Cloudflare → 源站 **525**（源站 nginx 与 `DEMO_LOCAL_ROOT` 目录权限）。
+2. nginx（或等价）将 `demos.xiaoyu-hh.cn` 的 document root / alias 指向 **`DEMO_LOCAL_ROOT`**，与后端上传路径一致。
+3. 对 **demos** 虚拟主机响应头（便于从 `blog.xiaoyu-hh.cn` 嵌入）：
    - 移除或覆盖 `X-Frame-Options: SAMEORIGIN`
    - 推荐：`Content-Security-Policy: frame-ancestors 'self' https://blog.xiaoyu-hh.cn https://*.xiaoyu-hh.cn`
    - 勿对 demos 整站设置阻止嵌入的 CSP。
-3. R2 公共桶或 Worker 路由将 `demos/` 前缀映射到 `DEMO_PUBLIC_BASE` 域名。
-4. 本地调试可设 `DEMO_STORAGE=local`，静态文件在 `DEMO_LOCAL_ROOT`；生产仍用 `r2`。
+4. 确认 `DEMO_STORAGE=local`，且未向 R2 `demos/` 前缀写入新对象。
 
 ## 上传示例 zip 流程
 

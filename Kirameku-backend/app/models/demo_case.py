@@ -5,7 +5,7 @@ from sqlmodel import SQLModel, Field
 
 
 class DemoCase(SQLModel, table=True):
-    """Interactive demo package metadata (static files on demos.* / R2 prefix demos/)."""
+    """Interactive demo package metadata (static files on server under DEMO_LOCAL_ROOT)."""
 
     __tablename__ = "demo_case"
 

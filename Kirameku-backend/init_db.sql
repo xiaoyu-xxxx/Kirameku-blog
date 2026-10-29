@@ -299,7 +299,7 @@ CREATE INDEX IF NOT EXISTS idx_visitor_ip ON visitor(ip);
 CREATE INDEX IF NOT EXISTS idx_visitor_created ON visitor(created_at DESC);
 
 -- ============================================
--- Demo case（交互案例 Demo，静态包托管在 demos.* / R2 demos/）
+-- Demo case（交互案例 Demo，静态包在服务器 DEMO_LOCAL_ROOT，经 demos.* 子域对外）
 -- ============================================
 CREATE TABLE IF NOT EXISTS demo_case (
     id            SERIAL PRIMARY KEY,
