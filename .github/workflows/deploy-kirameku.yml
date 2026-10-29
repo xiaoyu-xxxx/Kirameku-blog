@@ -1,0 +1,203 @@
+# Kirameku production deploy (CI build + rsync). Workflow-only pushes run both jobs.
+# Re-trigger after SSH_* repository secrets were configured (2026-10-29).
+name: Deploy Kirameku
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Kirameku/**"
+      - "Kirameku-backend/**"
+      - "deploy/**"
+      - ".github/workflows/deploy-kirameku.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-kirameku-production
+  cancel-in-progress: true
+
+env:
+  REMOTE_APP: /home/blog-deploy/apps/kirameku
+  REMOTE_FRONTEND: /home/blog-deploy/apps/kirameku/frontend
+  REMOTE_BACKEND: /home/blog-deploy/apps/kirameku/backend
+
+jobs:
+  detect-changes:
+    name: Detect path changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      backend: ${{ steps.changes.outputs.backend }}
+      workflow: ${{ steps.changes.outputs.workflow }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Paths filter
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            frontend:
+              - 'Kirameku/**'
+              - 'deploy/restart-frontend.sh'
+            backend:
+              - 'Kirameku-backend/**'
+              - 'deploy/restart-backend.sh'
+            workflow:
+              - '.github/workflows/deploy-kirameku.yml'
+
+  deploy-frontend:
+    name: Frontend (Next.js)
+    needs: detect-changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.frontend == 'true' ||
+      needs.detect-changes.outputs.workflow == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: Kirameku/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: Kirameku
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Next.js
+        working-directory: Kirameku
+        env:
+          NODE_ENV: production
+        run: pnpm build
+
+      - name: Prune dev dependencies
+        working-directory: Kirameku
+        run: pnpm prune --prod
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Rsync frontend artifacts
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          RSYNC_RSH="ssh -i ~/.ssh/deploy_key -p ${SSH_PORT} -o StrictHostKeyChecking=yes"
+          REMOTE="${SSH_USER}@${SSH_HOST}:${REMOTE_FRONTEND}/"
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
+            "${SSH_USER}@${SSH_HOST}" "mkdir -p ${REMOTE_FRONTEND}/logs"
+          cd Kirameku
+          rsync -avzr --delete \
+            -e "$RSYNC_RSH" \
+            --exclude '.git' \
+            --exclude 'cache/' \
+            .next/ public/ package.json pnpm-lock.yaml next.config.ts \
+            "$REMOTE"
+
+      - name: Restart frontend on server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
+            "${SSH_USER}@${SSH_HOST}" \
+            "bash ${REMOTE_APP}/restart-frontend.sh"
+
+  deploy-backend:
+    name: Backend (FastAPI + admin)
+    needs: detect-changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.detect-changes.outputs.backend == 'true' ||
+      needs.detect-changes.outputs.workflow == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: Kirameku-backend/admin/pnpm-lock.yaml
+
+      - name: Build admin (Vue)
+        working-directory: Kirameku-backend/admin
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Rsync backend
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          RSYNC_RSH="ssh -i ~/.ssh/deploy_key -p ${SSH_PORT} -o StrictHostKeyChecking=yes"
+          REMOTE="${SSH_USER}@${SSH_HOST}:${REMOTE_BACKEND}/"
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
+            "${SSH_USER}@${SSH_HOST}" "mkdir -p ${REMOTE_BACKEND}/logs ${REMOTE_BACKEND}/uploads"
+          rsync -avzr --delete \
+            -e "$RSYNC_RSH" \
+            --exclude '.git' \
+            --exclude '.pip-packages/' \
+            --exclude '.venv/' \
+            --exclude 'venv/' \
+            --exclude '.env' \
+            --exclude 'logs/' \
+            --exclude 'uploads/' \
+            --exclude 'admin/node_modules/' \
+            --exclude '**/__pycache__/' \
+            --exclude '**/*.pyc' \
+            Kirameku-backend/ \
+            "$REMOTE"
+
+      - name: Restart backend on server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
+            "${SSH_USER}@${SSH_HOST}" \
+            "bash ${REMOTE_APP}/restart-backend.sh"
