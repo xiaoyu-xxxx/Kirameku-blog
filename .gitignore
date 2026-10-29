@@ -77,3 +77,11 @@ deep-learning/
 
 # Kova
 Kova/
+
+# Local backups / packaging (do not commit large archives)
+backups/
+*.tgz
+*.tar.gz
+
+# Large static blog images (served from disk / CDN; keep out of git)
+Kirameku/public/images/
