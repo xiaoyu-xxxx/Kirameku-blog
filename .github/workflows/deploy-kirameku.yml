@@ -103,17 +103,27 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           RSYNC_RSH="ssh -i ~/.ssh/deploy_key -p ${SSH_PORT} -o StrictHostKeyChecking=yes"
-          REMOTE="${SSH_USER}@${SSH_HOST}:${REMOTE_FRONTEND}/"
+          REMOTE_ROOT="${SSH_USER}@${SSH_HOST}:${REMOTE_FRONTEND}/"
           ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o StrictHostKeyChecking=yes \
-            "${SSH_USER}@${SSH_HOST}" "mkdir -p ${REMOTE_FRONTEND}/logs"
+            "${SSH_USER}@${SSH_HOST}" "mkdir -p ${REMOTE_FRONTEND}/logs ${REMOTE_FRONTEND}/.next ${REMOTE_FRONTEND}/public"
           cd Kirameku
+          # Sync .next as a directory (no trailing slash) so contents land in frontend/.next/
+          # --delete only removes stale files inside .next, never frontend root (node_modules/package.json/public)
           rsync -avzr --delete \
             -e "$RSYNC_RSH" \
-            --exclude '.git' \
             --exclude 'cache/' \
-            .next/ public/ package.json pnpm-lock.yaml next.config.ts \
-            "$REMOTE"
-
+            .next \
+            "$REMOTE_ROOT"
+          # Sync public as a directory; --delete scoped to public/ only
+          rsync -avzr --delete \
+            -e "$RSYNC_RSH" \
+            public \
+            "$REMOTE_ROOT"
+          # Root package files without --delete (must not wipe node_modules or other server-side root files)
+          rsync -avzr \
+            -e "$RSYNC_RSH" \
+            package.json pnpm-lock.yaml next.config.ts \
+            "$REMOTE_ROOT"
       - name: Restart frontend on server
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
