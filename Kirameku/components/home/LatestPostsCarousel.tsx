@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { BookOpen, Clock, Eye, Heart } from "lucide-react";
 import { getPosts, type PostItem } from "@/app/api";
+import { siteConfig } from "@/siteConfig";
 
 function relativeDate(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -47,7 +48,7 @@ export default function LatestPostsCarousel() {
         className="relative flex-1 min-h-[160px] md:min-h-[160px] rounded-3xl overflow-hidden group cursor-pointer"
       >
         <Image
-          src={hero.cover || "/images/default-cover.jpg"}
+          src={hero.cover || siteConfig.defaultPostCover}
           alt={hero.title}
           fill
           className="object-cover transition-transform duration-700 group-hover:scale-105"
@@ -89,7 +90,7 @@ export default function LatestPostsCarousel() {
               className="relative rounded-2xl overflow-hidden group cursor-pointer h-[80px]"
             >
               <Image
-                src={post.cover || "/images/default-cover.jpg"}
+                src={post.cover || siteConfig.defaultPostCover}
                 alt={post.title}
                 fill
                 className="object-cover transition-transform duration-500 group-hover:scale-105"

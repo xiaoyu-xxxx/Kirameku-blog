@@ -1,5 +1,5 @@
 ---
-cover: "/images/2.webp"
+cover: "https://img.xiaoyu-hh.cn/photowall/2.webp"
 ---
 
 ## 你好，我是 Starhiro

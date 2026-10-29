@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { Eye, Heart, Clock, Pin } from "lucide-react";
+import { siteConfig } from "@/siteConfig";
 
 export interface PostOut {
   id: number;
@@ -94,7 +95,7 @@ export default function PostCard({ post, index }: PostCardProps) {
             {/* 封面图 */}
             <div className="relative aspect-[16/10] w-full overflow-hidden">
               <Image
-                src={post.cover || "/images/default-cover.jpg"}
+                src={post.cover || siteConfig.defaultPostCover}
                 alt={post.title}
                 fill
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
