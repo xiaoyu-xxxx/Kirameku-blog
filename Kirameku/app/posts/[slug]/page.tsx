@@ -46,7 +46,7 @@ hljs.registerLanguage("plaintext", plaintext);
 hljs.registerLanguage("console", shell);
 hljs.registerLanguage("ini", plaintext);
 
-marked.use({ async: false });
+marked.use({ async: false, gfm: true });
 import {
   ArrowLeft,
   Calendar,
@@ -359,6 +359,27 @@ export default function PostDetailPage() {
               }
               .dark .post-content th {
                 background-color: #1e293b !important;
+              }
+              .post-content iframe,
+              .post-content .demo-embed,
+              .post-content .kirameku-demo-embed {
+                display: block !important;
+                width: 100% !important;
+                min-height: 420px !important;
+                margin: 1.75rem 0 !important;
+                border: 0 !important;
+                border-radius: 1rem !important;
+                background: rgba(148, 163, 184, 0.12) !important;
+                box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25),
+                  0 12px 40px rgba(15, 23, 42, 0.08) !important;
+                backdrop-filter: blur(8px) !important;
+              }
+              .dark .post-content iframe,
+              .dark .post-content .demo-embed,
+              .dark .post-content .kirameku-demo-embed {
+                background: rgba(15, 23, 42, 0.45) !important;
+                box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+                  0 12px 40px rgba(0, 0, 0, 0.35) !important;
               }
             `}</style>
             <div

@@ -63,6 +63,15 @@ def _get_s3_client():
     )
 
 
+def upload_object(content: bytes, *, key: str, content_type: str | None = None) -> str:
+    """Upload bytes to R2; shared by image upload and article extract image migration."""
+    return _upload_bytes(content, key=key, content_type=content_type)
+
+
+def make_object_key(prefix: str, filename: str | None = None) -> str:
+    return _make_key(prefix, filename)
+
+
 def _upload_bytes(content: bytes, *, key: str, content_type: str | None) -> str:
     client = _get_s3_client()
     extra = {}

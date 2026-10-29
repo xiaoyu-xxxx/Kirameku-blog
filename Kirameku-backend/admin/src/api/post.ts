@@ -84,3 +84,15 @@ export const updatePost = (
 export const deletePost = (postId: number) => {
   return http.request<{ ok: boolean }>("delete", `/api/posts/${postId}`);
 };
+
+/** 从 URL 识别/提取文章内容 */
+export const extractPostFromUrl = (data: { url: string; useJina?: boolean }) => {
+  return http.request<{
+    title: string;
+    description: string;
+    content: string;
+    cover: string;
+    images: string[];
+    source: string;
+  }>("post", "/api/posts/extract", { data: { url: data.url, useJina: !!data.useJina } });
+};
