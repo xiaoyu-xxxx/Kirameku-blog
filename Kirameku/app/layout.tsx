@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Noto_Serif_SC } from "next/font/google";
 import "./globals.css";
 import "highlight.js/styles/vs2015.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { AppConfigProvider } from "@/components/providers/AppConfigProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { BackgroundProvider } from "@/components/providers/BackgroundProvider";
 import { MusicProvider } from "@/components/providers/MusicProvider";
@@ -58,27 +59,29 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans">
         <ThemeProvider>
-          <EffectProvider>
-            <WelcomeScreen />
-            <BackgroundProvider>
-              <MusicProvider>
-                <ToastProvider>
-                  <BackgroundRenderer />
-                  <VisitorTracker />
-                  <ClickEffect />
-                  <RadialMenu />
-                  <MouseTrail />
-                  <SeasonalEffect />
-                  <KiraSparkle />
-                  <Navbar />
-                  <main className="flex-1 pt-16">
-                    {children}
-                  </main>
-                  <ClientWidgets />
-                </ToastProvider>
-              </MusicProvider>
-            </BackgroundProvider>
-          </EffectProvider>
+          <AppConfigProvider>
+            <EffectProvider>
+              <WelcomeScreen />
+              <BackgroundProvider>
+                <MusicProvider>
+                  <ToastProvider>
+                    <BackgroundRenderer />
+                    <VisitorTracker />
+                    <ClickEffect />
+                    <RadialMenu />
+                    <MouseTrail />
+                    <SeasonalEffect />
+                    <KiraSparkle />
+                    <Navbar />
+                    <main className="flex-1 pt-16">
+                      {children}
+                    </main>
+                    <ClientWidgets />
+                  </ToastProvider>
+                </MusicProvider>
+              </BackgroundProvider>
+            </EffectProvider>
+          </AppConfigProvider>
         </ThemeProvider>
       </body>
     </html>

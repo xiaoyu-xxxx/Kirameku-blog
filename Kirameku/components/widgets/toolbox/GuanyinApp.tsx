@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
-
-const API = "https://v2.xxapi.cn/api/guanyinrandom";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 interface GuanyinData {
   explanation: string;
@@ -24,20 +24,22 @@ const FORTUNE_COLORS: Record<string, { bg: string; text: string; border: string 
 };
 
 export default function GuanyinApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_guanyin");
   const [data, setData] = useState<GuanyinData | null>(null);
   const [loading, setLoading] = useState(false);
 
   const draw = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(API);
+      const res = await fetch(base);
       const json = await res.json();
       if (json.code === 200 && json.data) {
         setData(json.data);
       }
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, []);
+  }, [base]);
 
   const colors = data?.fortune ? (FORTUNE_COLORS[data.fortune] || FORTUNE_COLORS["中签"]) : null;
 

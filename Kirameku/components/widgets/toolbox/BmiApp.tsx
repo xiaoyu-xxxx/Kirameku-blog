@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 interface BmiResult {
   bmi: number;
@@ -20,6 +22,8 @@ function getBmiPercent(bmi: number): number {
 }
 
 export default function BmiApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_bmi");
   const [height, setHeight] = useState("");
   const [weight, setWeight] = useState("");
   const [result, setResult] = useState<BmiResult | null>(null);
@@ -37,7 +41,7 @@ export default function BmiApp() {
     setError("");
     setResult(null);
     try {
-      const res = await fetch(`https://v2.xxapi.cn/api/bmi?height=${h}&weight=${w}`);
+      const res = await fetch(`${base}?height=${h}&weight=${w}`);
       const json = await res.json();
       if (json.code === 200 && json.data) {
         setResult(json.data);

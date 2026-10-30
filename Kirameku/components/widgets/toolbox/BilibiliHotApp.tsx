@@ -1,16 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-
-const API = "https://v2.xxapi.cn/api/bilibilihot";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 export default function BilibiliHotApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_bilibilihot");
   const [list, setList] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(API)
+    fetch(base)
       .then((r) => r.json())
       .then((json) => {
         if (json.code === 200 && Array.isArray(json.data)) {
@@ -21,7 +23,7 @@ export default function BilibiliHotApp() {
       })
       .catch(() => setError("网络请求失败"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [base]);
 
   if (loading) {
     return (

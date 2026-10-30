@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-
-const API = "https://v2.xxapi.cn/api/jiakao";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 interface Question {
   question: string;
@@ -17,6 +17,8 @@ interface Question {
 }
 
 export default function JiakaoApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_jiakao");
   const [subject, setSubject] = useState<1 | 4>(1);
   const [q, setQ] = useState<Question | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,14 +32,14 @@ export default function JiakaoApp() {
     setSelected(null);
     setShowResult(false);
     try {
-      const res = await fetch(`${API}?subject=${sub}`);
+      const res = await fetch(`${base}?subject=${sub}`);
       const json = await res.json();
       if (json.code === 200 && json.data) {
         setQ(json.data);
       }
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, []);
+  }, [base]);
 
   useEffect(() => { fetchQ(subject); }, [subject, fetchQ]);
 
