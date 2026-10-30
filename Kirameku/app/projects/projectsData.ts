@@ -28,7 +28,7 @@ export const projects: Project[] = [
     coverImage: photowallUrl("projects/haxatom.webp"),
     techStack: ["Python", "Vue 3", "FastAPI", "LangChain", "LangGraph", "RAG"],
     links: {
-      github: "https://github.com/Xinghongia/HAXAtom",
+      // github: 上游项目链接已移除
     },
     featured: true,
     status: "active",
@@ -43,7 +43,7 @@ export const projects: Project[] = [
     coverImage: photowallUrl("projects/starvid.webp"),
     techStack: ["Flutter", "Spring Boot", "MySQL", "Redis", "WebSocket", "GetX", "MyBatis-Plus"],
     links: {
-      gitee: "https://gitee.com/hongzyh/xinhe",
+      // gitee: 上游项目链接已移除
     },
     featured: false,
     status: "active",
@@ -58,7 +58,7 @@ export const projects: Project[] = [
     coverImage: photowallUrl("projects/hiromu-top.webp"),
     techStack: ["Vue", "APlayer", "Live2D", "CSS3"],
     links: {
-      live: "https://hiromu.top/",
+      // live: 上游站点链接已移除
     },
     featured: false,
     status: "active",
