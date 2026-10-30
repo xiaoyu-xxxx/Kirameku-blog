@@ -241,9 +241,12 @@ SiteConfig (独立)
 
 ---
 
-## 14. SiteConfig（站点配置）
+## 14. SiteConfig（站点配置 · 遗留）
 
-key-value 存储，存放博客全局配置（站点标题、社交链接、弹幕列表等）。
+> **权威公开配置源（现行）：** `site_setting` + `external_api` + `about_page`，经 `GET /api/public/config` 一次返回（字段：`site_settings` / `external_apis` / `about`）。管理端请用「系统设置 → 站点设置 / 外部 API / 关于页」。  
+> **`site_config` 表与旧菜单「站点配置」为遗留入口**：侧栏已隐藏，后端 API 暂保留不删表；新功能勿再写入此表。前台音乐歌单等请读 `site_settings.cloud_music_playlist_id`（及可选 `cloud_music_ids`），勿再依赖 `/api/site-config`。
+
+key-value 存储（遗留），曾用于站点标题、社交链接、弹幕列表等。
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|

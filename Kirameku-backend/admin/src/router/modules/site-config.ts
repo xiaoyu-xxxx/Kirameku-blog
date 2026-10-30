@@ -9,7 +9,8 @@ export default {
   meta: {
     icon: "ri:settings-3-line",
     title: "站点配置",
-    rank: siteConfig
+    rank: siteConfig,
+    showLink: false
   },
   children: [
     {
