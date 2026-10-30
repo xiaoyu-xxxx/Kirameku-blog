@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-
-const API = "https://v2.xxapi.cn/api/goldprice";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 type Tab = "recycle" | "bank" | "brand";
 
@@ -32,13 +32,15 @@ interface GoldData {
 }
 
 export default function GoldPriceApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_goldprice");
   const [data, setData] = useState<GoldData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("recycle");
 
   useEffect(() => {
-    fetch(API)
+    fetch(base)
       .then((r) => r.json())
       .then((json) => {
         if (json.code === 200 && json.data) {
@@ -49,7 +51,7 @@ export default function GoldPriceApp() {
       })
       .catch(() => setError("网络请求失败"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [base]);
 
   if (loading) {
     return (

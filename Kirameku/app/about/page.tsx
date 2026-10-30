@@ -15,23 +15,56 @@ export default async function AboutPage() {
   const fullPath = path.join(process.cwd(), "app", "about", "about.md");
   let contentHtml = "博主很懒，还没有写自我介绍哦...";
   let coverImage = photowallUrl("2.webp");
+  let authorName = siteConfig.authorName;
+  let avatarUrl = siteConfig.avatarUrl;
+  let markdown = "";
+
+  // 优先读取后端管理端配置（关于页正文/封面 + 站点设置）
+  // 不写死后端地址：优先 BACKEND_URL / NEXT_PUBLIC_API_URL，最后才回退本机。
+  const BACKEND_URL =
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://127.0.0.1:8000";
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/public/config`, {
+      cache: "no-store"
+    });
+    if (res.ok) {
+      const cfg = await res.json();
+      const about = cfg?.about ?? {};
+      const settings = cfg?.site_settings ?? {};
+      if (about.cover) coverImage = about.cover;
+      if (about.content) markdown = about.content;
+      if (settings.author_name) authorName = settings.author_name;
+      if (settings.avatar_url) avatarUrl = settings.avatar_url;
+    }
+  } catch (e) {
+    console.error("读取后端配置失败，回退本地 about.md", e);
+  }
+
+  // 后端无内容时回退本地 about.md
+  if (!markdown) {
+    try {
+      const fileContents = fs.readFileSync(fullPath, "utf8");
+      const { data, content } = matter(fileContents);
+      if (data.cover) coverImage = data.cover;
+      markdown = content;
+    } catch (e) {
+      console.error("读取 about.md 失败", e);
+    }
+  }
 
   try {
-    const fileContents = fs.readFileSync(fullPath, "utf8");
-    const { data, content } = matter(fileContents);
-
-    if (data.cover) coverImage = data.cover;
-
     const processedContent = await unified()
       .use(remarkParse)
       .use(remarkRehype, { allowDangerousHtml: true })
       .use(rehypeHighlight)
       .use(rehypeStringify, { allowDangerousHtml: true })
-      .process(content);
+      .process(markdown);
 
     contentHtml = processedContent.toString();
   } catch (e) {
-    console.error("读取 about.md 失败", e);
+    console.error("渲染关于页 Markdown 失败", e);
   }
 
   return (
@@ -52,7 +85,7 @@ export default async function AboutPage() {
           {/* 头像 */}
           <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white dark:border-slate-800 shadow-2xl overflow-hidden -mt-12 md:-mt-16 relative z-20 bg-white">
             <img
-              src={siteConfig.avatarUrl}
+              src={avatarUrl}
               alt="avatar"
               className="w-full h-full object-cover"
             />
@@ -64,7 +97,7 @@ export default async function AboutPage() {
               关于我
             </h1>
             <p className="text-sm md:text-lg text-indigo-600 dark:text-indigo-400 font-bold tracking-widest uppercase transition-colors duration-700">
-              Hello World, I&apos;m {siteConfig.authorName}
+              Hello World, I&apos;m {authorName}
             </p>
           </div>
 

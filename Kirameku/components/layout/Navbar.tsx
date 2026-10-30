@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { siteConfig } from "@/siteConfig";
 
 import SettingsPanel from "@/components/ui/SettingsPanel";
 import {
@@ -31,6 +33,7 @@ import {
 const navLinks = [
   { href: "/", label: "首页", icon: Home },
   { href: "/posts", label: "文章", icon: BookOpen },
+  { href: "/timeline", label: "时间轴", icon: Clock },
   { href: "/moments", label: "说说", icon: MessageSquare },
   { href: "/messages", label: "留言", icon: Newspaper },
   { href: "/novel", label: "小说", icon: Library },
@@ -38,7 +41,6 @@ const navLinks = [
   { href: "/projects", label: "项目", icon: FolderGit2 },
   { href: "/friends", label: "友链", icon: Users },
   { href: "/photowall", label: "照片墙", icon: Camera },
-  { href: "/timeline", label: "归档", icon: Clock },
   { href: "/music", label: "音乐", icon: Music },
   { href: "/resume", label: "简历", icon: FileText },
   { href: "/about", label: "关于", icon: User },
@@ -47,6 +49,8 @@ const navLinks = [
 export default function Navbar() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
+  const { siteSettings } = useAppConfig();
+  const siteTitle = siteSettings.site_title || siteConfig.title;
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -204,7 +208,13 @@ export default function Navbar() {
               style={easterEgg ? { animation: "spin 0.5s ease-in-out 6, rainbow 3s linear" } : undefined}
             >
               <span className={`text-xl font-bold tracking-tight ${easterEgg ? "text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500" : "text-slate-800 dark:text-white"}`} style={{ fontFamily: "'Noto Serif SC', serif" }}>
-                白居易
+                {siteTitle}
+              </span>
+              <span className={`text-xl font-bold ${easterEgg ? "text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500" : "text-sky-500 dark:text-sky-400"}`} style={{ fontFamily: "serif" }}>
+                の
+              </span>
+              <span className={`text-xl font-bold tracking-tight ${easterEgg ? "text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500" : "text-slate-800 dark:text-white"}`} style={{ fontFamily: "'Noto Serif SC', serif" }}>
+                小站
               </span>
             </Link>
 

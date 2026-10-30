@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 export default function DujitangApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_dujitang");
   const [quote, setQuote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -12,7 +16,7 @@ export default function DujitangApp() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("https://v2.xxapi.cn/api/dujitang");
+      const res = await fetch(base);
       const json = await res.json();
       if (json.code === 200 && json.data) {
         setQuote(json.data);
@@ -25,7 +29,7 @@ export default function DujitangApp() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [base]);
 
   return (
     <div className="flex flex-col h-full items-center justify-center gap-4">

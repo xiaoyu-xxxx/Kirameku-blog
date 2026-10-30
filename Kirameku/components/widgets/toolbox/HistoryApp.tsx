@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 interface HistoryEvent {
   text: string;
@@ -17,17 +19,18 @@ function parseEvent(raw: string): HistoryEvent {
 }
 
 export default function HistoryApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_history");
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
-  const initialized = useRef(false);
 
   const fetchHistory = async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("https://v2.xxapi.cn/api/history");
+      const res = await fetch(base);
       const json = await res.json();
       if (json.code === 200 && Array.isArray(json.data)) {
         setEvents(json.data.map(parseEvent));
@@ -42,11 +45,8 @@ export default function HistoryApp() {
   };
 
   useEffect(() => {
-    if (!initialized.current) {
-      fetchHistory();
-      initialized.current = true;
-    }
-  }, []);
+    fetchHistory();
+  }, [base]);
 
   const today = new Date();
   const dateStr = `${today.getMonth() + 1}月${today.getDate()}日`;
