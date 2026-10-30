@@ -299,6 +299,28 @@ CREATE INDEX IF NOT EXISTS idx_visitor_ip ON visitor(ip);
 CREATE INDEX IF NOT EXISTS idx_visitor_created ON visitor(created_at DESC);
 
 -- ============================================
+-- Demo case（交互案例 Demo，静态包在服务器 DEMO_LOCAL_ROOT，经 demos.* 子域对外）
+-- ============================================
+CREATE TABLE IF NOT EXISTS demo_case (
+    id            SERIAL PRIMARY KEY,
+    name          VARCHAR(100) NOT NULL,
+    slug          VARCHAR(80)  UNIQUE NOT NULL,
+    entry_path    VARCHAR(200) DEFAULT 'index.html',
+    entry_query   VARCHAR(200) DEFAULT '',
+    base_url      VARCHAR(300) DEFAULT '',
+    status        INTEGER      DEFAULT 1,
+    package_size  INTEGER      DEFAULT 0,
+    file_count    INTEGER      DEFAULT 0,
+    remark        VARCHAR(500) DEFAULT '',
+    created_by    VARCHAR(50)  DEFAULT '',
+    updated_by    VARCHAR(50)  DEFAULT '',
+    created_at    TIMESTAMP    DEFAULT NOW(),
+    updated_at    TIMESTAMP    DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_demo_case_slug ON demo_case(slug);
+
+-- ============================================
 -- 插入默认管理员账号（密码: admin123）
 -- bcrypt hash of "admin123"
 -- ============================================
