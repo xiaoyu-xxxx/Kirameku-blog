@@ -4,10 +4,10 @@ import { photowallUrl } from "@/lib/cdn";
 
 export const siteConfig = {
   // 网站标题与博主信息
-  title: "Starhiroの小站",
-  url: "https://boke.hiromu.top",
-  authorName: "Starhiro",
-  bio: "项目开源在 GitHub,点击下面的GitHub图标跳转,欢迎 star 和 fork！(◕‿◕)",
+  title: "白居易",
+  url: "https://blog.xiaoyu-hh.cn",
+  authorName: "小雨",
+  bio: "个人前端与博客向小站，记录学习、折腾与日常。",
 
   // 头像设置
   avatarUrl: photowallUrl("hong.jpg"),
@@ -38,14 +38,14 @@ export const siteConfig = {
   // 后端 API 地址（留空，开发通过 next.config.ts rewrites 代理，生产通过 Nginx 反代）
   apiBaseUrl: "",
 
-  // 社交链接
+  // 社交链接（仅保留已知真实账号；其余留空，勿伪造）
   social: {
-    github: "https://github.com/Xinghongia/Kirameku",
-    gitee: "https://gitee.com/hongzyh",
-    google: "mailto:guh982719@gmail.com",
-    email: "your.email@example.com",
-    qq: "123456789",
-    wechat: "your_wechat_id",
+    github: "https://github.com/xiaoyu-xxxx",
+    gitee: "",
+    google: "",
+    email: "",
+    qq: "",
+    wechat: "",
   },
 
   // 站点信息
@@ -55,13 +55,14 @@ export const siteConfig = {
     { name: "React 19", color: "text-cyan-400" },
     { name: "Tailwind 4", color: "text-teal-400" },
   ],
+  // 备案号：上游他人 ICP 已清空；有正式备案后再填
   icpConfig: {
-    name: "赣ICP备2025078417号",
+    name: "",
     link: "https://beian.miit.gov.cn/",
   },
   moeIcpConfig: {
-    name: "萌ICP备20260527号",
-    link: "https://icp.gov.moe/?keyword=20260527",
+    name: "",
+    link: "https://icp.gov.moe/",
   },
 
   // 分类标题
