@@ -11,7 +11,6 @@ import {
   resumeOtherProjects,
   resumeEducation,
   resumeHonors,
-  resumeSelfEvaluation,
   resumeContact,
   resumeSections,
 } from "./resumeData";
@@ -175,16 +174,19 @@ export default function ResumeView() {
                   <h3 className="text-sm md:text-base font-bold text-slate-900 dark:text-white mb-3 relative z-10">
                     {group.title}
                   </h3>
-                  <ul className="space-y-2 relative z-10">
-                    {group.items.map((item) => (
-                      <li
-                        key={item}
-                        className="text-xs md:text-sm text-slate-600 dark:text-slate-300 leading-relaxed pl-3 border-l-2 border-indigo-400/40 dark:border-indigo-500/30"
+                  <div className="flex flex-wrap gap-1.5 mb-3 relative z-10">
+                    {group.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="text-[10px] md:text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20"
                       >
-                        {item}
-                      </li>
+                        {tag}
+                      </span>
                     ))}
-                  </ul>
+                  </div>
+                  <p className="text-xs md:text-sm text-slate-600 dark:text-slate-300 leading-relaxed relative z-10">
+                    {group.summary}
+                  </p>
                 </div>
               ))}
             </div>
@@ -321,24 +323,22 @@ export default function ResumeView() {
             </ul>
           </section>
 
-          {/* 自评 */}
-          <section className="resume-block mb-10 md:mb-14">
-            <SectionTitle id="self-eval">自评</SectionTitle>
-            <BulletList items={resumeSelfEvaluation} />
-          </section>
-
-          {/* 联系方式 */}
+{/* 联系方式 */}
           <section className="resume-block">
             <SectionTitle id="contact">联系方式</SectionTitle>
             <ul className="space-y-3 text-sm md:text-base">
               <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300">
                 <Mail className="w-4 h-4 text-indigo-500 shrink-0" />
-                <a
-                  href={`mailto:${resumeContact.email}`}
-                  className="font-medium hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-                >
-                  {resumeContact.email}
-                </a>
+                <span className="font-medium">
+                  {resumeContact.contactHint}（
+                  <Link
+                    href="/about"
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    关于
+                  </Link>
+                  ）
+                </span>
               </li>
               <li className="flex items-center gap-3 text-slate-700 dark:text-slate-300">
                 <Globe className="w-4 h-4 text-sky-500 shrink-0" />
