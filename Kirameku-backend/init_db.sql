@@ -373,8 +373,7 @@ INSERT INTO external_api (key, name, base_url, path, method, enabled, params, de
     ('xxapi_horoscope',     '星座运势',   'https://v2.xxapi.cn/api/horoscope', '', 'GET', TRUE, '{}', '星座', 11),
     ('xxapi_genshin',       '原神图片',   'https://v2.xxapi.cn/api/ys', '', 'GET', TRUE, '{"return":"json"}', '原神', 12),
     ('xxapi_random4k',      '4K图片',     'https://v2.xxapi.cn/api/random4kPic', '', 'GET', TRUE, '{}', '4K 壁纸', 13),
-    ('xxapi_guanyin',       '观音灵签',   'https://v2.xxapi.cn/api/guanyinrandom', '', 'GET', TRUE, '{}', '观音灵签', 14),
-    ('meting_lrc',          '音乐歌词',   'https://api.injahow.cn/meting', '', 'GET', TRUE, '{}', '网易云歌词', 15)
+    ('xxapi_guanyin',       '观音灵签',   'https://v2.xxapi.cn/api/guanyinrandom', '', 'GET', TRUE, '{}', '观音灵签', 14)
 ON CONFLICT (key) DO NOTHING;
 
 -- ============================================

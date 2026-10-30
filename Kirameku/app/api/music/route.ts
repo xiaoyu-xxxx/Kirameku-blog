@@ -1,5 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import Meting from "@meting/core";
+
+// 自建 Meting-API 基址：默认同机 127.0.0.1:3002。
+// 生产/容器可用环境变量覆盖为 https://music.xiaoyu-hh.cn 或 https://origin-music.xiaoyu-hh.cn。
+const METING_API_BASE = (process.env.METING_API_BASE || "http://127.0.0.1:3002").replace(/\/+$/, "");
+const METING_TIMEOUT_MS = 5000;
+
+interface MetingTrack {
+  id?: string | number;
+  title?: string;
+  name?: string;
+  author?: string;
+  artist?: string | string[];
+  url?: string;
+  src?: string;
+  pic?: string;
+  cover?: string;
+  lrc?: string;
+  lrcUrl?: string;
+}
 
 interface SongData {
   id: string;
@@ -9,6 +27,60 @@ interface SongData {
   src: string;
   lrcUrl: string;
 }
+
+// 上游歌单/歌曲项通常不含顶层 id，从签名 URL 的 id= 参数回退。
+function extractTrackId(track: MetingTrack, index: number): string {
+  const raw = track.id;
+  if (raw !== undefined && raw !== null && raw !== "") {
+    return String(raw);
+  }
+  for (const candidate of [track.url, track.src, track.lrc, track.pic]) {
+    if (!candidate) continue;
+    try {
+      const id = new URL(candidate).searchParams.get("id");
+      if (id) return id;
+    } catch {
+      // 忽略非法 URL
+    }
+  }
+  return String(index);
+}
+
+function mapTrack(track: MetingTrack, index: number): SongData {
+  const artist = Array.isArray(track.artist)
+    ? track.artist.join(", ")
+    : String(track.artist || track.author || "未知歌手");
+
+  return {
+    id: extractTrackId(track, index),
+    title: String(track.title || track.name || "未知歌曲"),
+    artist,
+    cover: String(track.pic || track.cover || ""),
+    src: String(track.url || track.src || ""),
+    lrcUrl: String(track.lrc || track.lrcUrl || ""),
+  };
+}
+
+async function fetchMeting(params: Record<string, string>): Promise<MetingTrack[]> {
+  const qs = new URLSearchParams({ server: "netease", ...params });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), METING_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${METING_API_BASE}/api?${qs}`, { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`Meting upstream responded ${res.status}`);
+    }
+    const data: unknown = await res.json();
+    if (!Array.isArray(data)) {
+      throw new Error("Meting upstream returned unexpected payload");
+    }
+    return data as MetingTrack[];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -22,24 +94,17 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const meting = new Meting("netease");
-  meting.format(true);
-
   try {
-    let tracks: { id: string; name: string; artist: string[]; pic_id: string; url_id: string; lyric_id: string }[] = [];
+    let tracks: MetingTrack[] = [];
 
     if (playlistId) {
-      const raw = await meting.playlist(playlistId);
-      const parsed = JSON.parse(raw as string);
-      tracks = Array.isArray(parsed) ? parsed : [];
+      tracks = await fetchMeting({ type: "playlist", id: playlistId });
     } else if (songIds) {
       const ids = songIds.split(",").map((s) => s.trim()).filter(Boolean);
       const results = await Promise.all(
         ids.map(async (id) => {
           try {
-            const raw = await meting.song(id);
-            const parsed = JSON.parse(raw as string);
-            return Array.isArray(parsed) ? parsed : [parsed];
+            return await fetchMeting({ type: "song", id });
           } catch {
             return [];
           }
@@ -48,44 +113,10 @@ export async function GET(req: NextRequest) {
       tracks = results.flat();
     }
 
-    // 批量获取 URL
-    const songs: SongData[] = await Promise.all(
-      tracks.map(async (track) => {
-        let src = "";
-        try {
-          const urlRaw = await meting.url(track.url_id, 320);
-          const urlData = JSON.parse(urlRaw as string);
-          src = (urlData.url || "").replace(/^http:\/\//, "https://");
-        } catch {
-          // ignore
-        }
-
-        let cover = "";
-        try {
-          const picRaw = await meting.pic(track.pic_id, 300);
-          const picData = JSON.parse(picRaw as string);
-          cover = (picData.url || "").replace(/^http:\/\//, "https://");
-        } catch {
-          // ignore
-        }
-
-        return {
-          id: String(track.id),
-          title: track.name || "未知歌曲",
-          artist: Array.isArray(track.artist) ? track.artist.join(", ") : String(track.artist || "未知歌手"),
-          cover,
-          src,
-          lrcUrl: track.lyric_id ? `https://api.injahow.cn/meting/?server=netease&type=lrc&id=${track.lyric_id}` : "",
-        };
-      })
-    );
-
-    return NextResponse.json(songs.filter((s) => s.src));
+    const songs = tracks.map(mapTrack).filter((s) => s.src);
+    return NextResponse.json(songs);
   } catch (err) {
-    console.error("Meting error:", err);
-    return NextResponse.json(
-      { error: "获取音乐数据失败" },
-      { status: 500 }
-    );
+    console.error("Meting proxy error:", err instanceof Error ? err.message : String(err));
+    return NextResponse.json({ error: "获取音乐数据失败" }, { status: 500 });
   }
 }
