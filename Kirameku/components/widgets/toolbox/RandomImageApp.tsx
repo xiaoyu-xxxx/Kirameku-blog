@@ -2,8 +2,8 @@
 
 import { useState, useRef } from "react";
 import PortalOverlay from "./PortalOverlay";
-
-const BASE = "https://uapis.cn/api/v1/random/image";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 const categories = [
   { id: "", name: "全局随机" },
@@ -42,6 +42,8 @@ const subTypes: Record<string, { id: string; name: string }[]> = {
 };
 
 export default function RandomImageApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "uapis_random_image");
   const [category, setCategory] = useState("");
   const [type, setType] = useState("");
   const [imgUrl, setImgUrl] = useState("");
@@ -63,7 +65,7 @@ export default function RandomImageApp() {
     const params = new URLSearchParams();
     if (category) params.set("category", category);
     if (type) params.set("type", type);
-    const url = `${BASE}?${params.toString()}&t=${Date.now()}`;
+    const url = `${base}?${params.toString()}&t=${Date.now()}`;
     setImgUrl(url);
   };
 

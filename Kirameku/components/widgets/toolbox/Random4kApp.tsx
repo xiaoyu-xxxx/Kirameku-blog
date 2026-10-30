@@ -2,8 +2,8 @@
 
 import { useState, useCallback } from "react";
 import PortalOverlay from "./PortalOverlay";
-
-const API = "https://v2.xxapi.cn/api/random4kPic";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 type PicType = "acg" | "wallpaper";
 
@@ -13,6 +13,8 @@ const TABS: { id: PicType; label: string }[] = [
 ];
 
 export default function Random4kApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_random4k");
   const [type, setType] = useState<PicType>("acg");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,14 +23,14 @@ export default function Random4kApp() {
   const fetchImage = useCallback(async (t: PicType) => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}?type=${t}&return=json`);
+      const res = await fetch(`${base}?type=${t}&return=json`);
       const json = await res.json();
       if ((json.code === 200 || json.code === "200") && json.data) {
         setUrl(json.data);
       }
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, []);
+  }, [base]);
 
   return (
     <div className="flex flex-col gap-3">

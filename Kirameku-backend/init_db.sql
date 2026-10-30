@@ -341,3 +341,84 @@ INSERT INTO site_config (key, value, description) VALUES
     ('icp_number',      '""',                    'ICP备案号'),
     ('icp_link',        '""',                    'ICP备案链接')
 ON CONFLICT (key) DO NOTHING;
+
+-- ============================================
+-- 19. ExternalApi（站外 API 配置）
+-- ============================================
+CREATE TABLE IF NOT EXISTS external_api (
+    id            SERIAL PRIMARY KEY,
+    key           VARCHAR(100) UNIQUE NOT NULL,
+    name          VARCHAR(100) DEFAULT '',
+    base_url      VARCHAR(500) DEFAULT '',
+    path          VARCHAR(200) DEFAULT '',
+    method        VARCHAR(10)  DEFAULT 'GET',
+    enabled       BOOLEAN      DEFAULT TRUE,
+    params        TEXT         DEFAULT '{}',
+    description   VARCHAR(200) DEFAULT '',
+    sort          INTEGER      DEFAULT 0,
+    updated_at    TIMESTAMP    DEFAULT NOW()
+);
+
+INSERT INTO external_api (key, name, base_url, path, method, enabled, params, description, sort) VALUES
+    ('hitokoto',            '一言',       'https://v1.hitokoto.cn', '', 'GET', TRUE, '{}', '句子/语录', 1),
+    ('uapis_weather',       '天气',       'https://uapis.cn/api/v1/misc/weather', '', 'GET', TRUE, '{}', '天气查询', 2),
+    ('uapis_random_image',  '随机图片',   'https://uapis.cn/api/v1/random/image', '', 'GET', TRUE, '{}', '随机图片', 3),
+    ('xxapi_bilibilihot',   'B站热榜',    'https://v2.xxapi.cn/api/bilibilihot', '', 'GET', TRUE, '{}', 'B站热榜', 4),
+    ('xxapi_dog',           '狗狗日记',   'https://v2.xxapi.cn/api/dog', '', 'GET', TRUE, '{}', '狗狗日记', 5),
+    ('xxapi_dujitang',      '毒鸡汤',     'https://v2.xxapi.cn/api/dujitang', '', 'GET', TRUE, '{}', '毒鸡汤', 6),
+    ('xxapi_history',       '历史今天',   'https://v2.xxapi.cn/api/history', '', 'GET', TRUE, '{}', '历史今天', 7),
+    ('xxapi_bmi',           'BMI',        'https://v2.xxapi.cn/api/bmi', '', 'GET', TRUE, '{}', 'BMI 计算', 8),
+    ('xxapi_goldprice',     '今日金价',   'https://v2.xxapi.cn/api/goldprice', '', 'GET', TRUE, '{}', '金价', 9),
+    ('xxapi_jiakao',        '驾考题库',   'https://v2.xxapi.cn/api/jiakao', '', 'GET', TRUE, '{}', '驾考', 10),
+    ('xxapi_horoscope',     '星座运势',   'https://v2.xxapi.cn/api/horoscope', '', 'GET', TRUE, '{}', '星座', 11),
+    ('xxapi_genshin',       '原神图片',   'https://v2.xxapi.cn/api/ys', '', 'GET', TRUE, '{"return":"json"}', '原神', 12),
+    ('xxapi_random4k',      '4K图片',     'https://v2.xxapi.cn/api/random4kPic', '', 'GET', TRUE, '{}', '4K 壁纸', 13),
+    ('xxapi_guanyin',       '观音灵签',   'https://v2.xxapi.cn/api/guanyinrandom', '', 'GET', TRUE, '{}', '观音灵签', 14),
+    ('meting_lrc',          '音乐歌词',   'https://api.injahow.cn/meting', '', 'GET', TRUE, '{}', '网易云歌词', 15)
+ON CONFLICT (key) DO NOTHING;
+
+-- ============================================
+-- 20. SiteSetting（站点设置，结构化分组）
+-- ============================================
+CREATE TABLE IF NOT EXISTS site_setting (
+    id            SERIAL PRIMARY KEY,
+    key           VARCHAR(100) UNIQUE NOT NULL,
+    value         TEXT         DEFAULT '',
+    label         VARCHAR(100) DEFAULT '',
+    "group"       VARCHAR(50)  DEFAULT 'basic',
+    input_type    VARCHAR(20)  DEFAULT 'text',
+    description   VARCHAR(200) DEFAULT '',
+    sort          INTEGER      DEFAULT 0,
+    updated_at    TIMESTAMP    DEFAULT NOW()
+);
+
+INSERT INTO site_setting (key, value, label, "group", input_type, description, sort) VALUES
+    ('site_title',             '"白居易"',            '站点标题',   'basic',  'text', '导航栏与页面标题', 1),
+    ('author_name',            '"小雨"',              '作者名',     'basic',  'text', '关于页作者名', 2),
+    ('bio',                    '"个人前端与博客向小站，记录学习、折腾与日常。"', '站点简介', 'basic', 'text', 'SEO 描述与副标题', 3),
+    ('avatar_url',             '"https://img.xiaoyu-hh.cn/photowall/hong.jpg"', '头像', 'basic', 'text', '头像图片地址', 4),
+    ('github',                 '"https://github.com/xiaoyu-xxxx"', 'GitHub', 'social', 'text', 'GitHub 主页', 5),
+    ('cloud_music_playlist_id', '"17943739323"',      '音乐歌单ID', 'music',  'text', '网易云歌单 ID', 6),
+    ('chatter_title',          '"留言"',              '留言标题',   'content', 'text', '留言板块标题', 7),
+    ('chatter_description',    '"生活、技术、随想的碎片记录"', '留言描述', 'content', 'text', '留言板块描述', 8)
+ON CONFLICT (key) DO NOTHING;
+
+-- ============================================
+-- 21. AboutPage（关于页）
+-- ============================================
+CREATE TABLE IF NOT EXISTS about_page (
+    id            SERIAL PRIMARY KEY,
+    content       TEXT         DEFAULT '',
+    cover         VARCHAR(500) DEFAULT '',
+    updated_at    TIMESTAMP    DEFAULT NOW()
+);
+
+INSERT INTO about_page (id, content, cover)
+VALUES (
+    1,
+    '## 你好，我是小雨
+
+前端与博客向的个人站点，喜欢折腾技术，偶尔写写文章记录学习与日常。',
+    'https://img.xiaoyu-hh.cn/photowall/2.webp'
+)
+ON CONFLICT (id) DO NOTHING;

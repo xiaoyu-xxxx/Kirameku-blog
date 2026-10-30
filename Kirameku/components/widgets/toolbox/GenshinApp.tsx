@@ -2,10 +2,12 @@
 
 import { useState, useCallback } from "react";
 import PortalOverlay from "./PortalOverlay";
-
-const API = "https://v2.xxapi.cn/api/ys?return=json";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 export default function GenshinApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_genshin");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -13,14 +15,14 @@ export default function GenshinApp() {
   const fetchImage = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(API);
+      const res = await fetch(base);
       const json = await res.json();
       if (json.code === 200 && json.data) {
         setUrl(json.data);
       }
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, []);
+  }, [base]);
 
   return (
     <div className="flex flex-col gap-3">

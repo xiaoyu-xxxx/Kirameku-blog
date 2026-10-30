@@ -143,6 +143,14 @@ onMounted(() => onSearch());
         </div>
       </template>
 
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        title="本页为旧 site_config 表入口，站点配置请以「系统设置 → 站点设置」为准"
+        class="mb-3"
+      />
+
       <pure-table
         :data="dataList"
         :columns="columns"
