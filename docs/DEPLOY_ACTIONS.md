@@ -45,6 +45,7 @@
 
 - **`/`** → `http://127.0.0.1:3200`（Next）
 - **`/api/`、`/uploads/`** → `http://127.0.0.1:8200`（FastAPI，避免经 Next 代理）
+- **`/api/music`** → 例外：必须走 Next（`http://127.0.0.1:3200`），由 `app/api/music/route.ts` 薄 BFF 服务端转发自建 Meting（基址见 `METING_API_BASE`，默认 `http://127.0.0.1:3002`）；不要反代到 FastAPI。
 - 若需经 Next SSR 走 rewrite：仓库内 `next.config.ts` 仍将 `/api` 指到 `127.0.0.1:8000`（未改）；可在本机用额外监听或反代对齐，或依赖 OpenResty 直连 8200 处理浏览器/API 流量。
 
 HTML 建议禁用不当缓存（参考仓库根目录 `nginx-cache-debug.md`）：

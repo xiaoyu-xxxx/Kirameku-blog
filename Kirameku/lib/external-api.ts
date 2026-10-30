@@ -2,6 +2,7 @@ import type { ExternalApiConfig } from "@/components/providers/AppConfigProvider
 
 // 未配置 / 未加载时回退的默认地址，与改造前硬编码保持一致。
 // 注意：这里的值属于"公网直连地址"，严禁放置任何密钥/token。
+// 音乐歌词已改由 /api/music 薄 BFF 转发自建 Meting（type=lrc），故不再保留 meting_lrc 站外地址。
 export const DEFAULT_EXTERNAL_APIS: Record<string, string> = {
   hitokoto: "https://v1.hitokoto.cn",
   uapis_weather: "https://uapis.cn/api/v1/misc/weather",
@@ -17,7 +18,6 @@ export const DEFAULT_EXTERNAL_APIS: Record<string, string> = {
   xxapi_genshin: "https://v2.xxapi.cn/api/ys?return=json",
   xxapi_random4k: "https://v2.xxapi.cn/api/random4kPic",
   xxapi_guanyin: "https://v2.xxapi.cn/api/guanyinrandom",
-  meting_lrc: "https://api.injahow.cn/meting"
 };
 
 function parseParams(
