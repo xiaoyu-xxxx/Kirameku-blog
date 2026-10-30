@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-
-const API = "https://v2.xxapi.cn/api/horoscope";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 const SIGNS = [
   { id: "aries", label: "白羊", symbol: "♈", date: "3.21-4.19" },
@@ -79,6 +79,8 @@ function StarRating({ count }: { count: number }) {
 }
 
 export default function HoroscopeApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_horoscope");
   const [sign, setSign] = useState<string>("aries");
   const [time, setTime] = useState<TimeType>("today");
   const [data, setData] = useState<FortuneData | null>(null);
@@ -89,14 +91,14 @@ export default function HoroscopeApp() {
     setLoading(true);
     setDetail(null);
     try {
-      const res = await fetch(`${API}?type=${sign}&time=${time}`);
+      const res = await fetch(`${base}?type=${sign}&time=${time}`);
       const json = await res.json();
       if (json.code === 200 && json.data) {
         setData(json.data);
       }
     } catch { /* ignore */ }
     finally { setLoading(false); }
-  }, [sign, time]);
+  }, [sign, time, base]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

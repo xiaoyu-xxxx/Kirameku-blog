@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-
-const API_BASE = "https://uapis.cn/api/v1/misc/weather";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 interface WeatherData {
   province: string;
@@ -257,6 +257,8 @@ const indexKeys = ["clothing", "uv", "umbrella", "exercise", "cold_risk", "comfo
 const STORAGE_KEY = "weather-city";
 
 export default function WeatherApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "uapis_weather");
   const savedCity = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
   const [city, setCity] = useState("");
   const [inputCity, setInputCity] = useState(savedCity || "");
@@ -303,7 +305,7 @@ export default function WeatherApp() {
         }
       }
 
-      const res = await fetch(`${API_BASE}?${params.toString()}`);
+      const res = await fetch(`${base}?${params.toString()}`);
       if (!res.ok) {
         const err = await res.json().catch(() => null);
         throw new Error(err?.message || `请求失败 (${res.status})`);
@@ -317,7 +319,7 @@ export default function WeatherApp() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [base]);
 
   useEffect(() => {
     if (inited.current) return;

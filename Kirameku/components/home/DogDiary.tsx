@@ -2,8 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 export default function DogDiary() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "xxapi_dog");
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -11,7 +15,7 @@ export default function DogDiary() {
   const fetchDiary = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("https://v2.xxapi.cn/api/dog");
+      const res = await fetch(base);
       const json = await res.json();
       if (json.code === 200 && json.data) {
         setText(json.data);
@@ -21,7 +25,7 @@ export default function DogDiary() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [base]);
 
   useEffect(() => {
     fetchDiary();

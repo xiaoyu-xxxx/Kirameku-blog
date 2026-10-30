@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { resolveExternalBase } from "@/lib/external-api";
 
 const categories = [
   { id: "", label: "随机" },
@@ -20,6 +22,8 @@ interface HitokotoItem {
 }
 
 export default function HitokotoApp() {
+  const { externalApis } = useAppConfig();
+  const base = resolveExternalBase(externalApis, "hitokoto");
   const [current, setCurrent] = useState<HitokotoItem>({ text: "点击获取一言~", from: "", type: "" });
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState("");
@@ -29,7 +33,7 @@ export default function HitokotoApp() {
   const fetchHitokoto = useCallback(async (cat?: string) => {
     setLoading(true);
     try {
-      const url = cat ? `https://v1.hitokoto.cn/?c=${cat}` : "https://v1.hitokoto.cn";
+      const url = cat ? `${base}?c=${cat}` : base;
       const res = await fetch(url);
       const json = await res.json();
       const item = { text: json.hitokoto, from: json.from, type: json.type };
@@ -40,7 +44,7 @@ export default function HitokotoApp() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [base]);
 
   const handleCopy = async () => {
     try {

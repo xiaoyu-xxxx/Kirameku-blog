@@ -26,6 +26,9 @@ from app.schemas.bookmark import (
 from app.schemas.demo_case import (
     DemoCaseCreate, DemoCaseUpdate, DemoCaseOut, DemoIframeOut,
 )
+from app.schemas.external_api import ExternalApiCreate, ExternalApiUpdate, ExternalApiOut
+from app.schemas.site_setting import SiteSettingCreate, SiteSettingUpdate, SiteSettingOut
+from app.schemas.about_page import AboutPageUpdate, AboutPageOut
 
 __all__ = [
     "Token", "LoginRequest",
@@ -45,4 +48,7 @@ __all__ = [
     "BookmarkCategoryCreate", "BookmarkCategoryUpdate", "BookmarkCategoryOut",
     "BookmarkSiteCreate", "BookmarkSiteUpdate", "BookmarkSiteOut", "BookmarkFull",
     "DemoCaseCreate", "DemoCaseUpdate", "DemoCaseOut", "DemoIframeOut",
+    "ExternalApiCreate", "ExternalApiUpdate", "ExternalApiOut",
+    "SiteSettingCreate", "SiteSettingUpdate", "SiteSettingOut",
+    "AboutPageUpdate", "AboutPageOut",
 ]
