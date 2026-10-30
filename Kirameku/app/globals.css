@@ -236,3 +236,49 @@ input, textarea, [contenteditable], .prose, code, pre {
   75%  { transform: rotate(2deg) scale(1.01); transform-origin: bottom right; }
   100% { transform: rotate(0deg) scale(1); }
 }
+
+/* ========== 简历页打印 ========== */
+@media print {
+  body:has(.resume-print-root) {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: #fff !important;
+  }
+
+  body:has(.resume-print-root) nav,
+  body:has(.resume-print-root) .resume-no-print,
+  body:has(.resume-print-root) canvas,
+  body:has(.resume-print-root) [class*="WelcomeScreen"],
+  body:has(.resume-print-root) [data-radial-menu] {
+    display: none !important;
+  }
+
+  body:has(.resume-print-root) main {
+    padding-top: 0 !important;
+  }
+
+  body:has(.resume-print-root) .resume-print-content,
+  body:has(.resume-print-root) .resume-print-content * {
+    color: #111 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  body:has(.resume-print-root) .resume-print-content {
+    background: #fff !important;
+    border: 1px solid #ddd !important;
+  }
+
+  body:has(.resume-print-root) .resume-section-title,
+  body:has(.resume-print-root) .resume-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body:has(.resume-print-root) h2,
+  body:has(.resume-print-root) h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}
