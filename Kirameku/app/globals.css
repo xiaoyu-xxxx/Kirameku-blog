@@ -282,3 +282,90 @@ input, textarea, [contenteditable], .prose, code, pre {
     page-break-after: avoid;
   }
 }
+
+
+/* ========== 文章列表同页 View Transition（分类扫光） ========== */
+@property --posts-vt-progress {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+.vt-posts-list {
+  view-transition-name: vt-posts;
+}
+
+/* 分类切换期间关掉 root 默认交叉淡入，避免顶栏/侧栏/音乐闪 */
+html.vt-posts-running::view-transition-old(root),
+html.vt-posts-running::view-transition-new(root) {
+  animation: none;
+}
+
+html.vt-posts-running::view-transition-group(root) {
+  animation-duration: 0s;
+}
+
+::view-transition-group(vt-posts) {
+  animation-duration: 0.55s;
+  animation-timing-function: cubic-bezier(0.35, 0, 0.4, 1);
+}
+
+::view-transition-old(vt-posts),
+::view-transition-new(vt-posts) {
+  mix-blend-mode: normal;
+  animation-duration: 0.55s;
+  animation-timing-function: cubic-bezier(0.35, 0, 0.4, 1);
+  height: 100%;
+  overflow: clip;
+}
+
+::view-transition-old(vt-posts) {
+  animation-name: posts-vt-fade-out;
+  z-index: 1;
+}
+
+::view-transition-new(vt-posts) {
+  animation-name: posts-vt-wipe-in;
+  z-index: 2;
+  mask-image: linear-gradient(
+    270deg,
+    #000 var(--posts-vt-progress),
+    transparent calc(var(--posts-vt-progress) + 18%)
+  );
+  -webkit-mask-image: linear-gradient(
+    270deg,
+    #000 var(--posts-vt-progress),
+    transparent calc(var(--posts-vt-progress) + 18%)
+  );
+}
+
+@keyframes posts-vt-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.25;
+  }
+}
+
+@keyframes posts-vt-wipe-in {
+  from {
+    --posts-vt-progress: -18%;
+  }
+  to {
+    --posts-vt-progress: 118%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-posts-list {
+    view-transition-name: none;
+  }
+
+  ::view-transition-group(vt-posts),
+  ::view-transition-old(vt-posts),
+  ::view-transition-new(vt-posts) {
+    animation: none !important;
+  }
+}
+
