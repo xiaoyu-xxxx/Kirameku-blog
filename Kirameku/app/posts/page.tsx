@@ -1,21 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { flushSync } from "react-dom";
 import { motion } from "framer-motion";
 import { BookOpen, Loader2 } from "lucide-react";
 import PostCard, { type PostOut } from "@/components/posts/PostCard";
 import { getCategories, getPosts, type CategoryItem } from "@/app/api";
 
+const PAGE_SIZE = 12;
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function canStartViewTransition(): boolean {
+  return (
+    typeof document !== "undefined" &&
+    "startViewTransition" in document &&
+    typeof document.startViewTransition === "function" &&
+    !prefersReducedMotion()
+  );
+}
+
+function categoryHref(pathname: string, slug: string | null): string {
+  if (!slug) return pathname;
+  return `${pathname}?category=${encodeURIComponent(slug)}`;
+}
+
 export default function PostsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const urlCategory = searchParams.get("category");
+
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [posts, setPosts] = useState<PostOut[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(urlCategory);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const pageSize = 12;
+  const [skipEnter, setSkipEnter] = useState(false);
+  const [, startReactTransition] = useTransition();
+  const fetchGen = useRef(0);
+  const initialDone = useRef(false);
+  const switchingRef = useRef(false);
 
-  // 获取分类
   useEffect(() => {
     getCategories()
       .then((data) => {
@@ -25,36 +56,116 @@ export default function PostsPage() {
       .catch(() => {});
   }, []);
 
-  // 获取文章
-  useEffect(() => {
-    queueMicrotask(() => setLoading(true));
-    getPosts({
+  const fetchPage = useCallback(async (category: string | null, pageNum: number) => {
+    return getPosts({
       status: "published",
-      page: 1,
-      size: pageSize,
-      ...(activeCategory ? { category: activeCategory } : {}),
-    })
+      page: pageNum,
+      size: PAGE_SIZE,
+      ...(category ? { category } : {}),
+    });
+  }, []);
+
+  // Initial load + browser back/forward when URL category changes externally
+  useEffect(() => {
+    if (switchingRef.current) return;
+    const next = urlCategory;
+    if (initialDone.current && next === activeCategory) return;
+
+    const gen = ++fetchGen.current;
+    const isFirst = !initialDone.current;
+    if (isFirst) setLoading(true);
+
+    fetchPage(next, 1)
       .then((data) => {
-        setPosts(data);
-        setHasMore(data.length === pageSize);
+        if (gen !== fetchGen.current) return;
+        const apply = () => {
+          setActiveCategory(next);
+          setPosts(data);
+          setPage(1);
+          setHasMore(data.length === PAGE_SIZE);
+          setSkipEnter(!isFirst);
+          initialDone.current = true;
+        };
+
+        if (!isFirst && canStartViewTransition()) {
+          document.documentElement.classList.add("vt-posts-running");
+          const vt = document.startViewTransition(() => {
+            flushSync(apply);
+          });
+          vt.finished.finally(() => {
+            document.documentElement.classList.remove("vt-posts-running");
+          });
+        } else {
+          apply();
+        }
       })
-      .catch(() => { setPosts([]); })
-      .finally(() => { setLoading(false); });
-  }, [activeCategory, pageSize]);
+      .catch(() => {
+        if (gen !== fetchGen.current) return;
+        setActiveCategory(next);
+        setPosts([]);
+        setHasMore(false);
+        initialDone.current = true;
+      })
+      .finally(() => {
+        if (gen === fetchGen.current) setLoading(false);
+      });
+    // Drive from URL; activeCategory compared inside to skip no-ops
+  }, [urlCategory, fetchPage]);
+
+  const handleCategoryChange = async (slug: string | null) => {
+    if (slug === activeCategory || switchingRef.current) return;
+
+    const href = categoryHref(pathname, slug);
+    switchingRef.current = true;
+    const gen = ++fetchGen.current;
+
+    try {
+      const data = await fetchPage(slug, 1);
+      if (gen !== fetchGen.current) return;
+
+      const commitDom = () => {
+        flushSync(() => {
+          setActiveCategory(slug);
+          setPosts(data);
+          setPage(1);
+          setHasMore(data.length === PAGE_SIZE);
+          setSkipEnter(true);
+          setLoading(false);
+        });
+      };
+
+      if (canStartViewTransition()) {
+        document.documentElement.classList.add("vt-posts-running");
+        const vt = document.startViewTransition(commitDom);
+        await vt.finished.catch(() => {});
+        document.documentElement.classList.remove("vt-posts-running");
+      } else {
+        commitDom();
+      }
+
+      startReactTransition(() => {
+        router.replace(href, { scroll: false });
+      });
+    } catch {
+      if (gen === fetchGen.current) {
+        setPosts([]);
+        setHasMore(false);
+        setLoading(false);
+      }
+    } finally {
+      switchingRef.current = false;
+    }
+  };
 
   const handleLoadMore = () => {
     const next = page + 1;
     setPage(next);
     setLoading(true);
-    getPosts({
-      status: "published",
-      page: next,
-      size: pageSize,
-      ...(activeCategory ? { category: activeCategory } : {}),
-    })
+    fetchPage(activeCategory, next)
       .then((data) => {
         setPosts((prev) => [...prev, ...data]);
-        setHasMore(data.length === pageSize);
+        setHasMore(data.length === PAGE_SIZE);
+        setSkipEnter(true);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -62,7 +173,6 @@ export default function PostsPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12">
-      {/* 页头 */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -80,7 +190,6 @@ export default function PostsPage() {
         </p>
       </motion.div>
 
-      {/* 分类筛选 */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -91,7 +200,7 @@ export default function PostsPage() {
           label="全部"
           count={null}
           active={activeCategory === null}
-          onClick={() => setActiveCategory(null)}
+          onClick={() => handleCategoryChange(null)}
         />
         {categories.map((cat) => (
           <FilterTab
@@ -99,32 +208,32 @@ export default function PostsPage() {
             label={cat.name}
             count={cat.post_count}
             active={activeCategory === cat.slug}
-            onClick={() => setActiveCategory(cat.slug)}
+            onClick={() => handleCategoryChange(cat.slug)}
           />
         ))}
       </motion.div>
 
-      {/* 文章网格 */}
-      {loading && posts.length === 0 ? (
-        <div className="flex items-center justify-center py-32">
-          <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
-        </div>
-      ) : posts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-32 text-slate-400">
-          <BookOpen className="w-12 h-12 mb-4 opacity-40" />
-          <p>暂无文章</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
-          {posts.map((post, i) => (
-            <div key={post.id}>
-              <PostCard post={post} index={i} />
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="vt-posts-list">
+        {loading && posts.length === 0 ? (
+          <div className="flex items-center justify-center py-32">
+            <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-32 text-slate-400">
+            <BookOpen className="w-12 h-12 mb-4 opacity-40" />
+            <p>暂无文章</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
+            {posts.map((post, i) => (
+              <div key={post.id}>
+                <PostCard post={post} index={i} skipEnter={skipEnter} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* 加载更多 */}
       {hasMore && posts.length > 0 && !loading && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -141,7 +250,6 @@ export default function PostsPage() {
         </motion.div>
       )}
 
-      {/* 加载中指示器（加载更多时） */}
       {loading && posts.length > 0 && (
         <div className="flex justify-center mt-10">
           <Loader2 className="w-6 h-6 text-sky-500 animate-spin" />
@@ -150,8 +258,6 @@ export default function PostsPage() {
     </div>
   );
 }
-
-/* ---------- 分类标签组件 ---------- */
 
 function FilterTab({
   label,

@@ -29,9 +29,11 @@ export interface PostOut {
 interface PostCardProps {
   post: PostOut;
   index: number;
+  /** Skip Framer entrance so View Transition wipe is not doubled */
+  skipEnter?: boolean;
 }
 
-export default function PostCard({ post, index }: PostCardProps) {
+export default function PostCard({ post, index, skipEnter = false }: PostCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [tilt, setTilt] = useState({ rotateX: 0, rotateY: 0 });
   const [glare, setGlare] = useState({ x: 50, y: 50, opacity: 0 });
@@ -70,9 +72,13 @@ export default function PostCard({ post, index }: PostCardProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 40 }}
+      initial={skipEnter ? false : { opacity: 0, y: 40 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.08, ease: "easeOut" }}
+      transition={
+        skipEnter
+          ? { duration: 0 }
+          : { duration: 0.5, delay: index * 0.08, ease: "easeOut" }
+      }
     >
       <Link href={`/posts/${post.slug}`}>
         <div
@@ -92,8 +98,8 @@ export default function PostCard({ post, index }: PostCardProps) {
               transformStyle: "preserve-3d",
             }}
           >
-            {/* 封面图 */}
-            <div className="relative aspect-[16/10] w-full overflow-hidden">
+            {/* 封面：固定比例 + 灰底占位，避免 VT 结束后蹦图 */}
+            <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-200 dark:bg-slate-700">
               <Image
                 src={post.cover || siteConfig.defaultPostCover}
                 alt={post.title}
@@ -141,22 +147,6 @@ export default function PostCard({ post, index }: PostCardProps) {
                 </div>
               </div>
             </div>
-
-            {/* 标签栏
-            {post.tags.length > 0 && (
-              <div className="px-5 py-3 bg-white/5 dark:bg-white/[0.03] backdrop-blur-xl border-t border-white/10">
-                <div className="flex flex-wrap gap-1.5">
-                  {post.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-2 py-0.5 rounded-full text-xs bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )} */}
 
             {/* 3D 光泽效果 */}
             <div
