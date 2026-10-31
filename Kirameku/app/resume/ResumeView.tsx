@@ -9,7 +9,6 @@ import {
   resumeWorkExperience,
   resumeProjects,
   resumeOtherProjects,
-  resumeEducation,
   resumeHonors,
   resumeContact,
   resumeSections,
@@ -21,7 +20,6 @@ import {
   Mail,
   Globe,
   Briefcase,
-  GraduationCap,
   ChevronRight,
 } from "lucide-react";
 
@@ -293,34 +291,21 @@ export default function ResumeView() {
             </div>
           </section>
 
-          {/* 教育与荣誉 */}
+          {/* 荣誉 */}
           <section className="resume-block mb-10 md:mb-14">
-            <SectionTitle id="education">教育与荣誉</SectionTitle>
-            <div className="rounded-2xl p-4 md:p-6 bg-white/25 dark:bg-slate-900/25 border border-white/20 dark:border-white/10 mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
-                <div className="flex items-start gap-2">
-                  <GraduationCap className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
-                  <div>
-                    <h3 className="font-bold text-slate-900 dark:text-white">{resumeEducation.school}</h3>
-                    <p className="text-sm text-sky-600 dark:text-sky-400 font-semibold">
-                      {resumeEducation.major} · {resumeEducation.degree}
-                    </p>
-                  </div>
-                </div>
-                <PeriodBadge period={resumeEducation.period} />
-              </div>
-              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{resumeEducation.detail}</p>
+            <SectionTitle id="honors">荣誉</SectionTitle>
+            <div className="rounded-2xl p-4 md:p-6 bg-white/25 dark:bg-slate-900/25 border border-white/20 dark:border-white/10">
+              <ul className="space-y-2">
+                {resumeHonors.map((h) => (
+                  <li
+                    key={h}
+                    className="text-sm text-slate-700 dark:text-slate-300 flex gap-2 pl-3 border-l-2 border-sky-400/40"
+                  >
+                    {h}
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="space-y-2">
-              {resumeHonors.map((h) => (
-                <li
-                  key={h}
-                  className="text-sm text-slate-700 dark:text-slate-300 flex gap-2 pl-3 border-l-2 border-sky-400/40"
-                >
-                  {h}
-                </li>
-              ))}
-            </ul>
           </section>
 
 {/* 联系方式 */}
