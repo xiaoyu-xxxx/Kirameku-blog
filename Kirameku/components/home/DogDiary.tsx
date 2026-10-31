@@ -40,7 +40,7 @@ export default function DogDiary() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black text-pink-500 dark:text-pink-400 tracking-widest uppercase bg-white/50 dark:bg-slate-900/50 px-2 py-0.5 rounded-sm shadow-sm">
-              每日一练
+              每日一言
             </span>
             <button
               type="button"
@@ -91,7 +91,7 @@ export default function DogDiary() {
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  每日一练
+                  每日一言
                 </h3>
                 <button
                   type="button"
