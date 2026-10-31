@@ -177,14 +177,6 @@ export const resumeOtherProjects: ResumeOtherProject[] = [
   },
 ];
 
-export const resumeEducation = {
-  period: "2020.09–2023.06",
-  school: "某高职院校",
-  major: "移动应用开发",
-  degree: "大专",
-  detail: "前端与小程序方向；校内课题与软著实践，暑期企业实习。",
-};
-
 export const resumeHonors = [
   "校级网页技能竞赛一等奖、二等奖",
   "省级信创类竞赛省赛三等奖",
@@ -211,6 +203,6 @@ export const resumeSections: ResumeSection[] = [
   { id: "work", label: "工作经历" },
   { id: "projects", label: "项目经历" },
   { id: "other-projects", label: "其他项目" },
-  { id: "education", label: "教育与荣誉" },
+  { id: "honors", label: "荣誉" },
   { id: "contact", label: "联系方式" },
 ];
