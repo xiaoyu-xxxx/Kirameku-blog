@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { BookOpen, Loader2 } from "lucide-react";
 import PostCard, { type PostOut } from "@/components/posts/PostCard";
 import { getCategories, getPosts, type CategoryItem } from "@/app/api";
@@ -115,22 +115,13 @@ export default function PostsPage() {
           <p>暂无文章</p>
         </div>
       ) : (
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeCategory ?? "all"}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6"
-          >
-            {posts.map((post, i) => (
-              <div key={post.id}>
-                <PostCard post={post} index={i} />
-              </div>
-            ))}
-          </motion.div>
-        </AnimatePresence>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
+          {posts.map((post, i) => (
+            <div key={post.id}>
+              <PostCard post={post} index={i} />
+            </div>
+          ))}
+        </div>
       )}
 
       {/* 加载更多 */}
