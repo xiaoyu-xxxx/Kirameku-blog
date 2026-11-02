@@ -796,10 +796,13 @@ export default function Live2D() {
           return r.json() as Promise<ModelList>;
         });
       }
+      if (!list || !list.models.length) {
+        throw new Error("Live2D model list empty");
+      }
 
       const assetBase = normalizeAssetBase(catalog?.asset_base);
-      const models: Oml2dModel[] = (list.models ?? []).map((paths, i) => ({
-        name: list!.messages?.[i] ?? `model-${i}`,
+      const models: Oml2dModel[] = list.models.map((paths, i) => ({
+        name: list.messages?.[i] ?? `model-${i}`,
         path: paths.map((p) => `${assetBase}model/${p}/index.json`),
       }));
 
