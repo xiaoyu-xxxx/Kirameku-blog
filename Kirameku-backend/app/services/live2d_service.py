@@ -24,7 +24,12 @@ from app.schemas.live2d import (
     Live2DModelUpdate,
     Live2DSkinUpdate,
 )
-from app.utils.live2d_storage import delete_model_files, write_package_files
+from app.utils.live2d_storage import (
+    delete_version_files,
+    slug_disk_exists,
+    versions_from_skin_rel_paths,
+    write_package_files,
+)
 
 SETTING_MODEL_ID = "live2d_default_model_id"
 SETTING_SKIN_ID = "live2d_default_skin_id"
@@ -134,13 +139,16 @@ def delete_model(session: Session, model_id: int) -> None:
     if row.source != "upload":
         raise HTTPException(400, "内置模型不可物理删除，请改为禁用")
     skins = list(session.exec(select(Live2DSkin).where(Live2DSkin.model_id == model_id)).all())
+    versions = versions_from_skin_rel_paths(row.slug, [s.rel_path for s in skins])
     for s in skins:
         session.delete(s)
     # clear site defaults if pointing here
     _clear_defaults_if_model(session, model_id)
     session.delete(row)
     session.commit()
-    delete_model_files(row.slug)
+    # Only remove this upload's version dirs — never rmtree model/<slug>/ (may share with builtins).
+    for ver in versions:
+        delete_version_files(row.slug, ver)
 
 
 def _get_or_create_setting(session: Session, key: str, *, label: str, default: str = "") -> SiteSetting:
@@ -456,6 +464,11 @@ def register_upload(
         raise HTTPException(400, "slug 仅允许小写字母、数字与连字符")
     if session.exec(select(Live2DModel).where(Live2DModel.slug == slug)).first():
         raise HTTPException(400, "slug 已存在")
+    if slug_disk_exists(slug):
+        raise HTTPException(
+            400,
+            "slug 与磁盘已有 model/<slug>/ 冲突（可能为内置包目录），请换一个 slug",
+        )
 
     version = time.strftime("%Y%m%d%H%M%S")
     # Common prefix among package dirs (may be empty)
