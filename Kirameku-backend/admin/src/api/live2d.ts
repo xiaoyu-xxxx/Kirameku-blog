@@ -8,6 +8,8 @@ export type Live2DSkinItem = {
   sort: number;
   enabled: boolean;
   preview_url?: string | null;
+  /** assembled | bundle | atlas */
+  preview_kind?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -24,6 +26,8 @@ export type Live2DModelItem = {
   source: string;
   skin_count: number;
   preview_url?: string | null;
+  /** assembled | bundle | atlas */
+  preview_kind?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -111,3 +115,26 @@ export const uploadLive2DSkins = (payload: {
     }
   );
 };
+
+export const uploadSkinPreviewCache = (skinId: number, blob: Blob) => {
+  const form = new FormData();
+  const file =
+    blob instanceof File
+      ? blob
+      : new File([blob], `preview-${skinId}.png`, {
+          type: blob.type || "image/png"
+        });
+  form.append("file", file);
+  return http.request<Live2DSkinItem>(
+    "post",
+    `/api/live2d/skins/${skinId}/preview-cache`,
+    {
+      data: form,
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 30000
+    }
+  );
+};
+
+export const deleteSkinPreviewCache = (skinId: number) =>
+  http.request<Live2DSkinItem>("delete", `/api/live2d/skins/${skinId}/preview-cache`);

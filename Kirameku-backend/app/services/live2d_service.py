@@ -26,8 +26,11 @@ from app.schemas.live2d import (
     Live2DSkinUpdate,
 )
 from app.utils.live2d_storage import (
+    delete_model_preview_dir,
+    delete_skin_preview_file,
     delete_version_files,
     model_slug_root,
+    preview_cache_path,
     slug_disk_exists,
     versions_from_skin_rel_paths,
     write_package_files,
@@ -38,34 +41,181 @@ SETTING_SKIN_ID = "live2d_default_skin_id"
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
-# Process-local cache for admin preview_url (rel_path -> url|None). Phase-1: no DB column.
-_preview_url_cache: dict[str, str | None] = {}
+# Process-local cache for admin preview resolution.
+# key -> (url, kind) where kind is assembled|bundle|atlas|None
+_preview_url_cache: dict[str, tuple[str | None, str | None]] = {}
+
+_BUNDLE_PREVIEW_CANDIDATES = (
+    "preview.png",
+    "preview.jpg",
+    "preview.jpeg",
+    "preview.webp",
+    "thumbnail.png",
+    "thumbnail.jpg",
+    "thumbnail.jpeg",
+    "thumbnail.webp",
+    "thumb.png",
+    "thumb.jpg",
+    "ico.png",
+    "ico_00.png",
+    "ico_01.png",
+)
+
+_PREVIEW_CACHE_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _safe_rel_key(rel_path: str) -> str:
+    return (rel_path or "").replace("\\", "/").strip("/")
+
+
+def _asset_url(*parts: str, bust: str | int | None = None) -> str:
+    cleaned = "/".join(str(p).replace("\\", "/").strip("/") for p in parts if str(p).strip("/"))
+    url = f"{LIVE2D_ASSET_BASE}{cleaned}"
+    if bust is not None and bust != "":
+        url = f"{url}?v={bust}"
+    return url
+
+
+def _invalidate_preview_cache(*keys: str) -> None:
+    for key in keys:
+        _preview_url_cache.pop(key, None)
+
+
+def _resolve_bundle_preview(rel_key: str) -> str | None:
+    """B: package-local finished preview / thumbnail / ico_*."""
+    root = LIVE2D_LOCAL_ROOT / "model" / rel_key
+    if not root.is_dir():
+        return None
+    for name in _BUNDLE_PREVIEW_CANDIDATES:
+        path = root / name
+        if path.is_file():
+            return _asset_url("model", rel_key, name, bust=int(path.stat().st_mtime))
+    try:
+        for path in sorted(root.iterdir()):
+            if not path.is_file():
+                continue
+            lower = path.name.lower()
+            if lower.startswith("ico_") and lower.endswith((".png", ".jpg", ".jpeg", ".webp")):
+                return _asset_url("model", rel_key, path.name, bust=int(path.stat().st_mtime))
+            if lower.startswith(("preview", "thumbnail", "thumb.")) and lower.endswith(
+                (".png", ".jpg", ".jpeg", ".webp")
+            ):
+                return _asset_url("model", rel_key, path.name, bust=int(path.stat().st_mtime))
+    except OSError:
+        return None
+    return None
+
+
+def _resolve_atlas_preview(rel_key: str) -> str | None:
+    """A: textures[0] from index.json."""
+    try:
+        index_path = LIVE2D_LOCAL_ROOT / "model" / rel_key / "index.json"
+        if not index_path.is_file():
+            return None
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+        textures = data.get("textures") if isinstance(data, dict) else None
+        if isinstance(textures, list) and textures:
+            tex = str(textures[0]).replace("\\", "/").lstrip("/")
+            if tex and ".." not in tex.split("/"):
+                return _asset_url("model", rel_key, tex)
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return None
+
+
+def resolve_skin_preview(
+    *,
+    model_id: int | None,
+    skin_id: int | None,
+    rel_path: str,
+) -> tuple[str | None, str | None]:
+    """Admin preview_url priority: assembled cache -> bundle -> textures[0] -> None.
+
+    Returns (url, kind) where kind is assembled|bundle|atlas|None.
+    Public catalog is unchanged (does not call this).
+    """
+    rel_key = _safe_rel_key(rel_path)
+    cache_key = f"{model_id}:{skin_id}:{rel_key}"
+    if cache_key in _preview_url_cache:
+        return _preview_url_cache[cache_key]
+
+    url: str | None = None
+    kind: str | None = None
+
+    if model_id is not None and skin_id is not None:
+        cache_file = preview_cache_path(model_id, skin_id)
+        if cache_file.is_file() and cache_file.stat().st_size > 0:
+            url = _asset_url(
+                "previews",
+                str(model_id),
+                f"{skin_id}.png",
+                bust=int(cache_file.stat().st_mtime),
+            )
+            kind = "assembled"
+
+    if url is None and rel_key:
+        bundle = _resolve_bundle_preview(rel_key)
+        if bundle:
+            url, kind = bundle, "bundle"
+
+    if url is None and rel_key:
+        atlas = _resolve_atlas_preview(rel_key)
+        if atlas:
+            url, kind = atlas, "atlas"
+
+    _preview_url_cache[cache_key] = (url, kind)
+    return url, kind
 
 
 def resolve_skin_preview_url(rel_path: str) -> str | None:
-    """Read model/<rel_path>/index.json textures[0] -> public static URL.
-
-    Does not change public catalog shape. Missing/invalid -> None.
-    """
-    key = (rel_path or "").replace("\\", "/").strip("/")
-    if not key:
-        return None
-    if key in _preview_url_cache:
-        return _preview_url_cache[key]
-    url: str | None = None
-    try:
-        index_path = LIVE2D_LOCAL_ROOT / "model" / key / "index.json"
-        if index_path.is_file():
-            data = json.loads(index_path.read_text(encoding="utf-8"))
-            textures = data.get("textures") if isinstance(data, dict) else None
-            if isinstance(textures, list) and textures:
-                tex = str(textures[0]).replace("\\", "/").lstrip("/")
-                if tex and ".." not in tex.split("/"):
-                    url = f"{LIVE2D_ASSET_BASE}model/{key}/{tex}"
-    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
-        url = None
-    _preview_url_cache[key] = url
+    """Backward-compatible helper without assembled cache (no ids)."""
+    url, _ = resolve_skin_preview(model_id=None, skin_id=None, rel_path=rel_path)
     return url
+
+
+def save_skin_preview_cache(
+    session: Session,
+    skin_id: int,
+    *,
+    data: bytes,
+    content_type: str,
+) -> dict:
+    """Write assembled preview under previews/<model_id>/<skin_id>.png (not model/)."""
+    row = session.get(Live2DSkin, skin_id)
+    if not row:
+        raise HTTPException(404, "皮肤不存在")
+    ctype = (content_type or "").split(";")[0].strip().lower()
+    if ctype not in {"image/png", "image/webp"}:
+        raise HTTPException(400, "仅支持 image/png 或 image/webp")
+    if not data:
+        raise HTTPException(400, "预览文件为空")
+    if len(data) > _PREVIEW_CACHE_MAX_BYTES:
+        raise HTTPException(400, "预览文件不能超过 2MB")
+
+    dest = preview_cache_path(row.model_id, skin_id)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+
+    row.updated_at = _now()
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    _invalidate_preview_cache(f"{row.model_id}:{row.id}:{_safe_rel_key(row.rel_path)}")
+    return serialize_skin(row)
+
+
+def delete_skin_preview_cache(session: Session, skin_id: int) -> dict:
+    """Drop assembled preview cache file; preview falls back to bundle/atlas."""
+    row = session.get(Live2DSkin, skin_id)
+    if not row:
+        raise HTTPException(404, "皮肤不存在")
+    delete_skin_preview_file(row.model_id, skin_id)
+    row.updated_at = _now()
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    _invalidate_preview_cache(f"{row.model_id}:{row.id}:{_safe_rel_key(row.rel_path)}")
+    return serialize_skin(row)
 
 
 def _preferred_skin(session: Session, model: Live2DModel) -> Live2DSkin | None:
@@ -100,6 +250,14 @@ def _skin_count(session: Session, model_id: int) -> int:
 
 def serialize_model(session: Session, row: Live2DModel) -> dict:
     preferred = _preferred_skin(session, row)
+    preview_url = None
+    preview_kind = None
+    if preferred:
+        preview_url, preview_kind = resolve_skin_preview(
+            model_id=row.id,
+            skin_id=preferred.id,
+            rel_path=preferred.rel_path,
+        )
     return {
         "id": row.id,
         "slug": row.slug,
@@ -111,13 +269,19 @@ def serialize_model(session: Session, row: Live2DModel) -> dict:
         "file_count": row.file_count,
         "source": row.source,
         "skin_count": _skin_count(session, row.id or 0),
-        "preview_url": resolve_skin_preview_url(preferred.rel_path) if preferred else None,
+        "preview_url": preview_url,
+        "preview_kind": preview_kind,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
 
 
 def serialize_skin(row: Live2DSkin) -> dict:
+    preview_url, preview_kind = resolve_skin_preview(
+        model_id=row.model_id,
+        skin_id=row.id,
+        rel_path=row.rel_path,
+    )
     return {
         "id": row.id,
         "model_id": row.model_id,
@@ -125,7 +289,8 @@ def serialize_skin(row: Live2DSkin) -> dict:
         "label": row.label,
         "sort": row.sort,
         "enabled": row.enabled,
-        "preview_url": resolve_skin_preview_url(row.rel_path),
+        "preview_url": preview_url,
+        "preview_kind": preview_kind,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
@@ -209,6 +374,8 @@ def delete_model(session: Session, model_id: int) -> None:
     # Only remove this upload's version dirs — never rmtree model/<slug>/ (may share with builtins).
     for ver in versions:
         delete_version_files(row.slug, ver)
+    # Drop assembled preview cache for this model.
+    delete_model_preview_dir(model_id)
 
 
 def _get_or_create_setting(session: Session, key: str, *, label: str, default: str = "") -> SiteSetting:
