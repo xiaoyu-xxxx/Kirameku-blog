@@ -15,6 +15,7 @@ from app.config import (
     LIVE2D_ASSET_BASE,
     LIVE2D_DEFAULT_MODEL_INDEX,
     LIVE2D_DEFAULT_CLOTHES_INDEX,
+    LIVE2D_LOCAL_ROOT,
     LIVE2D_MODEL_LIST_PATH,
 )
 from app.models.live2d import Live2DModel, Live2DSkin
@@ -37,6 +38,55 @@ SETTING_SKIN_ID = "live2d_default_skin_id"
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
+# Process-local cache for admin preview_url (rel_path -> url|None). Phase-1: no DB column.
+_preview_url_cache: dict[str, str | None] = {}
+
+
+def resolve_skin_preview_url(rel_path: str) -> str | None:
+    """Read model/<rel_path>/index.json textures[0] -> public static URL.
+
+    Does not change public catalog shape. Missing/invalid -> None.
+    """
+    key = (rel_path or "").replace("\\", "/").strip("/")
+    if not key:
+        return None
+    if key in _preview_url_cache:
+        return _preview_url_cache[key]
+    url: str | None = None
+    try:
+        index_path = LIVE2D_LOCAL_ROOT / "model" / key / "index.json"
+        if index_path.is_file():
+            data = json.loads(index_path.read_text(encoding="utf-8"))
+            textures = data.get("textures") if isinstance(data, dict) else None
+            if isinstance(textures, list) and textures:
+                tex = str(textures[0]).replace("\\", "/").lstrip("/")
+                if tex and ".." not in tex.split("/"):
+                    url = f"{LIVE2D_ASSET_BASE}model/{key}/{tex}"
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+        url = None
+    _preview_url_cache[key] = url
+    return url
+
+
+def _preferred_skin(session: Session, model: Live2DModel) -> Live2DSkin | None:
+    skins = list(
+        session.exec(
+            select(Live2DSkin)
+            .where(Live2DSkin.model_id == model.id)
+            .order_by(Live2DSkin.sort, Live2DSkin.id)
+        ).all()
+    )
+    if not skins:
+        return None
+    if model.default_skin_id is not None:
+        for s in skins:
+            if s.id == model.default_skin_id:
+                return s
+    for s in skins:
+        if s.enabled:
+            return s
+    return skins[0]
+
 
 def _now() -> datetime:
     return datetime.now()
@@ -49,6 +99,7 @@ def _skin_count(session: Session, model_id: int) -> int:
 
 
 def serialize_model(session: Session, row: Live2DModel) -> dict:
+    preferred = _preferred_skin(session, row)
     return {
         "id": row.id,
         "slug": row.slug,
@@ -60,6 +111,7 @@ def serialize_model(session: Session, row: Live2DModel) -> dict:
         "file_count": row.file_count,
         "source": row.source,
         "skin_count": _skin_count(session, row.id or 0),
+        "preview_url": resolve_skin_preview_url(preferred.rel_path) if preferred else None,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
@@ -73,6 +125,7 @@ def serialize_skin(row: Live2DSkin) -> dict:
         "label": row.label,
         "sort": row.sort,
         "enabled": row.enabled,
+        "preview_url": resolve_skin_preview_url(row.rel_path),
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }

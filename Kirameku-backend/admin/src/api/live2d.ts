@@ -7,6 +7,7 @@ export type Live2DSkinItem = {
   label: string;
   sort: number;
   enabled: boolean;
+  preview_url?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -22,6 +23,7 @@ export type Live2DModelItem = {
   file_count: number;
   source: string;
   skin_count: number;
+  preview_url?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -109,4 +111,3 @@ export const uploadLive2DSkins = (payload: {
     }
   );
 };
-

@@ -11,6 +11,7 @@ class Live2DSkinOut(BaseModel):
     label: str
     sort: int
     enabled: bool
+    preview_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -26,6 +27,7 @@ class Live2DModelOut(BaseModel):
     file_count: int
     source: str
     skin_count: int = 0
+    preview_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

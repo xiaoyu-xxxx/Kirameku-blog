@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
+import { ElMessageBox } from "element-plus";
 import { message } from "@/utils/message";
 import {
   getLive2DModels,
@@ -21,11 +22,19 @@ import { useRenderIcon } from "@/components/ReIcon/src/hooks";
 
 defineOptions({ name: "Live2DAdminIndex" });
 
+type FilterMode = "all" | "enabled" | "builtin" | "upload";
+
 const loading = ref(false);
+const detailLoading = ref(false);
 const dataList = ref<Live2DModelItem[]>([]);
 const defaults = ref<Live2DDefaults | null>(null);
-const expandLoading = ref<Record<number, boolean>>({});
 const detailMap = ref<Record<number, Live2DModelDetail>>({});
+
+const searchQ = ref("");
+const filterMode = ref<FilterMode>("all");
+const selectedModelId = ref<number | null>(null);
+const selectedSkinId = ref<number | null>(null);
+const previewBroken = ref(false);
 
 const uploadVisible = ref(false);
 const uploading = ref(false);
@@ -38,7 +47,6 @@ const uploadForm = ref({
 
 const appendVisible = ref(false);
 const appending = ref(false);
-const appendTarget = ref<Live2DModelItem | null>(null);
 const appendForm = ref({
   file: null as File | null,
   setAsDefault: false
@@ -51,42 +59,55 @@ const defaultForm = ref({
 });
 const defaultSkins = ref<Live2DSkinItem[]>([]);
 
-const columns: TableColumnList = [
-  { type: "expand", slot: "expand", width: 50 },
-  { label: "ID", prop: "id", width: 70 },
-  { label: "名称", prop: "name", minWidth: 160 },
-  { label: "Slug", prop: "slug", minWidth: 140 },
-  {
-    label: "来源",
-    prop: "source",
-    width: 90,
-    formatter: ({ source }) => (source === "upload" ? "上传" : "内置")
-  },
-  {
-    label: "启用",
-    prop: "enabled",
-    width: 90,
-    slot: "enabled"
-  },
-  { label: "排序", prop: "sort", width: 80 },
-  {
-    label: "皮肤",
-    prop: "skin_count",
-    width: 80
-  },
-  {
-    label: "体积",
-    prop: "package_size",
-    width: 110,
-    formatter: ({ package_size, source }) =>
-      source === "upload" && package_size
-        ? formatSize(package_size)
-        : source === "builtin"
-          ? "—"
-          : "0"
-  },
-  { label: "操作", fixed: "right", width: 360, slot: "operation" }
-];
+const filteredModels = computed(() => {
+  const q = searchQ.value.trim().toLowerCase();
+  return dataList.value.filter(m => {
+    if (filterMode.value === "enabled" && !m.enabled) return false;
+    if (filterMode.value === "builtin" && m.source !== "builtin") return false;
+    if (filterMode.value === "upload" && m.source !== "upload") return false;
+    if (!q) return true;
+    return (
+      m.name.toLowerCase().includes(q) ||
+      m.slug.toLowerCase().includes(q) ||
+      String(m.id).includes(q)
+    );
+  });
+});
+
+const selectedModel = computed(
+  () => dataList.value.find(m => m.id === selectedModelId.value) ?? null
+);
+
+const selectedDetail = computed(() => {
+  const id = selectedModelId.value;
+  if (!id) return null;
+  return detailMap.value[id] ?? null;
+});
+
+const selectedSkin = computed(() => {
+  const detail = selectedDetail.value;
+  if (!detail || !selectedSkinId.value) return null;
+  return detail.skins.find(s => s.id === selectedSkinId.value) ?? null;
+});
+
+const previewUrl = computed(() => selectedSkin.value?.preview_url || "");
+
+const defaultsSummary = computed(() => {
+  const d = defaults.value;
+  if (!d?.default_model_id) return "未设置";
+  const model = dataList.value.find(m => m.id === d.default_model_id);
+  const modelName = model?.name ?? `#${d.default_model_id}`;
+  let skinLabel = "";
+  if (d.default_skin_id) {
+    const cached = detailMap.value[d.default_model_id]?.skins.find(
+      s => s.id === d.default_skin_id
+    );
+    skinLabel = cached?.label ?? `皮肤 #${d.default_skin_id}`;
+  } else {
+    skinLabel = "模型默认皮肤";
+  }
+  return `${modelName} · ${skinLabel}`;
+});
 
 function formatSize(n: number) {
   if (!n) return "0";
@@ -95,7 +116,16 @@ function formatSize(n: number) {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-async function onSearch() {
+function pickInitialSkin(detail: Live2DModelDetail): number | null {
+  if (detail.default_skin_id) {
+    const hit = detail.skins.find(s => s.id === detail.default_skin_id);
+    if (hit) return hit.id;
+  }
+  const enabled = detail.skins.find(s => s.enabled);
+  return enabled?.id ?? detail.skins[0]?.id ?? null;
+}
+
+async function onSearch(preferModelId?: number | null) {
   loading.value = true;
   try {
     const [models, defs] = await Promise.all([
@@ -104,33 +134,76 @@ async function onSearch() {
     ]);
     dataList.value = models;
     defaults.value = defs;
+    const keep =
+      preferModelId ??
+      selectedModelId.value ??
+      defs.default_model_id ??
+      models[0]?.id ??
+      null;
+    if (keep && models.some(m => m.id === keep)) {
+      await selectModel(keep, false);
+    } else if (models[0]) {
+      await selectModel(models[0].id, false);
+    } else {
+      selectedModelId.value = null;
+      selectedSkinId.value = null;
+    }
   } finally {
     loading.value = false;
   }
 }
 
-async function ensureDetail(row: Live2DModelItem) {
-  if (detailMap.value[row.id]) return;
-  expandLoading.value[row.id] = true;
+async function ensureDetail(modelId: number, force = false) {
+  if (!force && detailMap.value[modelId]) return detailMap.value[modelId];
+  detailLoading.value = true;
   try {
-    detailMap.value[row.id] = await getLive2DModel(row.id);
+    const detail = await getLive2DModel(modelId);
+    detailMap.value = { ...detailMap.value, [modelId]: detail };
+    return detail;
   } finally {
-    expandLoading.value[row.id] = false;
+    detailLoading.value = false;
   }
 }
 
-async function onExpandChange(row: Live2DModelItem, expanded: boolean) {
-  if (expanded) await ensureDetail(row);
+async function selectModel(modelId: number, resetSkin = true) {
+  selectedModelId.value = modelId;
+  previewBroken.value = false;
+  const detail = await ensureDetail(modelId);
+  if (resetSkin || !selectedSkinId.value || !detail.skins.some(s => s.id === selectedSkinId.value)) {
+    selectedSkinId.value = pickInitialSkin(detail);
+  }
 }
+
+function selectSkin(skinId: number) {
+  selectedSkinId.value = skinId;
+  previewBroken.value = false;
+}
+
+watch(previewUrl, () => {
+  previewBroken.value = false;
+});
 
 async function toggleEnabled(row: Live2DModelItem, val: boolean) {
   try {
     await updateLive2DModel(row.id, { enabled: val });
     message(val ? "已启用" : "已禁用", { type: "success" });
-    onSearch();
+    row.enabled = val;
+    await onSearch(row.id);
   } catch (e: any) {
     message(e?.message ?? "更新失败", { type: "error" });
     row.enabled = !val;
+  }
+}
+
+async function saveModelName(row: Live2DModelItem, name: string) {
+  const next = (name ?? "").trim();
+  if (!next || next === row.name) return;
+  try {
+    await updateLive2DModel(row.id, { name: next });
+    message("名称已更新", { type: "success" });
+    await onSearch(row.id);
+  } catch (e: any) {
+    message(e?.message ?? "更新失败", { type: "error" });
   }
 }
 
@@ -138,7 +211,7 @@ async function saveSort(row: Live2DModelItem, sort: number) {
   try {
     await updateLive2DModel(row.id, { sort: Number(sort) });
     message("排序已更新", { type: "success" });
-    onSearch();
+    await onSearch(row.id);
   } catch (e: any) {
     message(e?.message ?? "更新失败", { type: "error" });
   }
@@ -148,9 +221,8 @@ async function setModelDefaultSkin(modelId: number, skinId: number) {
   try {
     await updateLive2DModel(modelId, { default_skin_id: skinId });
     message("已设为该模型默认皮肤", { type: "success" });
-    delete detailMap.value[modelId];
-    await ensureDetail({ id: modelId } as Live2DModelItem);
-    onSearch();
+    await ensureDetail(modelId, true);
+    await onSearch(modelId);
   } catch (e: any) {
     message(e?.message ?? "更新失败", { type: "error" });
   }
@@ -160,8 +232,7 @@ async function toggleSkin(skin: Live2DSkinItem, val: boolean) {
   try {
     await updateLive2DSkin(skin.id, { enabled: val });
     message("皮肤状态已更新", { type: "success" });
-    delete detailMap.value[skin.model_id];
-    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+    await ensureDetail(skin.model_id, true);
   } catch (e: any) {
     message(e?.message ?? "更新失败", { type: "error" });
     skin.enabled = !val;
@@ -172,20 +243,17 @@ async function saveSkinLabel(skin: Live2DSkinItem, label: string) {
   const next = (label ?? "").trim();
   if (!next) {
     message("label 不能为空", { type: "warning" });
-    delete detailMap.value[skin.model_id];
-    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+    await ensureDetail(skin.model_id, true);
     return;
   }
   if (next === skin.label) return;
   try {
     await updateLive2DSkin(skin.id, { label: next });
     message("名称已更新", { type: "success" });
-    delete detailMap.value[skin.model_id];
-    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+    await ensureDetail(skin.model_id, true);
   } catch (e: any) {
     message(e?.message ?? "更新失败", { type: "error" });
-    delete detailMap.value[skin.model_id];
-    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+    await ensureDetail(skin.model_id, true);
   }
 }
 
@@ -195,17 +263,15 @@ async function saveSkinSort(skin: Live2DSkinItem, sort: number) {
   try {
     await updateLive2DSkin(skin.id, { sort: next });
     message("皮肤排序已更新", { type: "success" });
-    delete detailMap.value[skin.model_id];
-    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+    await ensureDetail(skin.model_id, true);
   } catch (e: any) {
     message(e?.message ?? "更新失败", { type: "error" });
-    delete detailMap.value[skin.model_id];
-    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+    await ensureDetail(skin.model_id, true);
   }
 }
 
-function openAppend(row: Live2DModelItem) {
-  appendTarget.value = row;
+function openAppend() {
+  if (!selectedModel.value) return;
   appendForm.value = { file: null, setAsDefault: false };
   appendVisible.value = true;
 }
@@ -215,7 +281,7 @@ function onAppendFileChange(file: any) {
 }
 
 async function submitAppend() {
-  if (!appendTarget.value) return;
+  if (!selectedModel.value) return;
   if (!appendForm.value.file) {
     message("请选择 zip", { type: "warning" });
     return;
@@ -223,14 +289,15 @@ async function submitAppend() {
   appending.value = true;
   try {
     const detail = await uploadLive2DSkins({
-      modelId: appendTarget.value.id,
+      modelId: selectedModel.value.id,
       file: appendForm.value.file,
       setAsDefault: appendForm.value.setAsDefault
     });
     message("装扮已追加（版本化路径）", { type: "success" });
     appendVisible.value = false;
-    detailMap.value[appendTarget.value.id] = detail;
-    onSearch();
+    detailMap.value[selectedModel.value.id] = detail;
+    selectedSkinId.value = pickInitialSkin(detail);
+    await onSearch(selectedModel.value.id);
   } catch (e: any) {
     message(e?.message ?? "追加失败", { type: "error" });
   } finally {
@@ -243,18 +310,33 @@ async function handleDelete(row: Live2DModelItem) {
     await deleteLive2DModel(row.id);
     message("已删除", { type: "success" });
     delete detailMap.value[row.id];
-    onSearch();
+    if (selectedModelId.value === row.id) {
+      selectedModelId.value = null;
+      selectedSkinId.value = null;
+    }
+    await onSearch();
   } catch (e: any) {
     message(e?.message ?? "删除失败", { type: "error" });
   }
 }
 
 async function handleImport(force = false) {
+  if (force) {
+    try {
+      await ElMessageBox.confirm(
+        "force=true 会覆盖已有导入关联，确定继续？",
+        "强制导入",
+        { type: "warning" }
+      );
+    } catch {
+      return;
+    }
+  }
   try {
     const res = await importLive2DModels(force);
     message(res.message || "导入完成", { type: "success" });
     detailMap.value = {};
-    onSearch();
+    await onSearch();
   } catch (e: any) {
     message(e?.message ?? "导入失败", { type: "error" });
   }
@@ -280,7 +362,7 @@ async function submitUpload() {
   }
   uploading.value = true;
   try {
-    await uploadLive2DZip({
+    const detail = await uploadLive2DZip({
       file: uploadForm.value.file,
       name: uploadForm.value.name,
       slug: uploadForm.value.slug,
@@ -288,7 +370,8 @@ async function submitUpload() {
     });
     message("上传成功（路径已版本化）", { type: "success" });
     uploadVisible.value = false;
-    onSearch();
+    detailMap.value[detail.id] = detail;
+    await onSearch(detail.id);
   } catch (e: any) {
     message(e?.message ?? "上传失败", { type: "error" });
   } finally {
@@ -312,7 +395,7 @@ async function loadDefaultSkins() {
     defaultSkins.value = [];
     return;
   }
-  const detail = await getLive2DModel(id);
+  const detail = await ensureDetail(id);
   defaultSkins.value = detail.skins.filter(s => s.enabled);
   if (
     defaultForm.value.default_skin_id &&
@@ -335,135 +418,289 @@ async function submitDefaults() {
   }
 }
 
-onMounted(onSearch);
+async function setSiteDefaultQuick() {
+  if (!selectedModel.value || !selectedSkin.value) {
+    message("请先选择模型与装扮", { type: "warning" });
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将站点默认设为「${selectedModel.value.name} · ${selectedSkin.value.label}」？`,
+      "设为站点默认",
+      { type: "warning" }
+    );
+  } catch {
+    return;
+  }
+  try {
+    defaults.value = await setLive2DDefaults({
+      default_model_id: selectedModel.value.id,
+      default_skin_id: selectedSkin.value.id
+    });
+    message("站点默认已更新", { type: "success" });
+  } catch (e: any) {
+    message(e?.message ?? "保存失败", { type: "error" });
+  }
+}
+
+function isSiteDefaultModel(modelId: number) {
+  return defaults.value?.default_model_id === modelId;
+}
+
+onMounted(() => onSearch());
 </script>
 
 <template>
-  <div class="p-4">
-    <el-card shadow="never">
-      <template #header>
-        <div class="flex justify-between items-center flex-wrap gap-2">
-          <div>
-            <span class="font-medium">看板娘管理</span>
+  <div class="live2d-admin p-4" v-loading="loading">
+    <header class="top-bar">
+      <div class="top-left min-w-0">
+        <div class="title">看板娘</div>
+        <div class="defaults-chip">
+          <span>站点默认：<strong>{{ defaultsSummary }}</strong></span>
+          <el-button size="small" type="primary" @click="openDefaultDialog">更改</el-button>
+        </div>
+      </div>
+      <div class="top-actions">
+        <el-dropdown split-button @click="handleImport(false)">
+          导入 model_list
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="handleImport(true)">强制导入 force=true</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button @click="openDefaultDialog">设置站点默认</el-button>
+        <el-button
+          type="primary"
+          :icon="useRenderIcon('ri:upload-2-line')"
+          @click="openUpload"
+        >
+          上传新模型 zip
+        </el-button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="pane left-pane">
+        <div class="pane-hd">
+          <span>模型</span>
+          <span class="hint">{{ filteredModels.length }} / {{ dataList.length }}</span>
+        </div>
+        <el-input
+          v-model="searchQ"
+          class="search"
+          clearable
+          placeholder="搜索名称 / slug…"
+          :prefix-icon="useRenderIcon('ri:search-line')"
+        />
+        <div class="filters">
+          <button
+            v-for="item in [
+              { key: 'all', label: '全部' },
+              { key: 'enabled', label: '已启用' },
+              { key: 'builtin', label: '内置' },
+              { key: 'upload', label: '上传' }
+            ]"
+            :key="item.key"
+            type="button"
+            class="chip"
+            :class="{ active: filterMode === item.key }"
+            @click="filterMode = item.key as FilterMode"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+        <ul class="model-list">
+          <li v-if="!filteredModels.length" class="empty-list">暂无模型。可先导入 model_list。</li>
+          <li
+            v-for="m in filteredModels"
+            :key="m.id"
+            class="model-item"
+            :class="{ active: selectedModelId === m.id }"
+            @click="selectModel(m.id)"
+          >
+            <div class="thumb" :class="{ placeholder: !m.preview_url }">
+              <img v-if="m.preview_url" :src="m.preview_url" alt="" loading="lazy" />
+            </div>
+            <div class="model-meta min-w-0">
+              <div class="name truncate">{{ m.name }}</div>
+              <div class="slug truncate">{{ m.slug }} · {{ m.skin_count }} 套</div>
+              <div class="tags">
+                <span class="tag" :class="m.source === 'upload' ? 'upload' : 'builtin'">
+                  {{ m.source === "upload" ? "上传" : "内置" }}
+                </span>
+                <span v-if="isSiteDefaultModel(m.id)" class="tag site">站点默认</span>
+              </div>
+            </div>
+            <span class="dot" :class="{ off: !m.enabled }" :title="m.enabled ? '已启用' : '已禁用'" />
+          </li>
+        </ul>
+      </aside>
+
+      <section class="pane main-pane">
+        <div v-if="!selectedModel" class="empty-main">
+          <el-empty description="请选择左侧模型" />
+        </div>
+        <div v-else class="main-body" v-loading="detailLoading">
+          <div class="preview-row">
+            <div class="preview-stage">
+              <img
+                v-if="previewUrl && !previewBroken"
+                :src="previewUrl"
+                alt="skin preview"
+                @error="previewBroken = true"
+              />
+              <div v-else class="fail-note">
+                <div>{{ selectedSkin ? "无预览 / 贴图加载失败" : "请选择装扮" }}</div>
+                <div class="sub">静态 textures[0]，未嵌入 OML2D</div>
+              </div>
+              <div v-if="selectedSkin" class="preview-caption">
+                {{ selectedSkin.label }}
+                <span v-if="!selectedSkin.enabled"> · 已禁用</span>
+              </div>
+            </div>
+
+            <div class="side-card">
+              <h3>{{ selectedModel.name }}</h3>
+              <div class="kv">
+                <div>
+                  <span>ID / Slug</span>
+                  <b>#{{ selectedModel.id }} · {{ selectedModel.slug }}</b>
+                </div>
+                <div>
+                  <span>来源</span>
+                  <b>{{ selectedModel.source === "upload" ? "上传" : "内置" }}</b>
+                </div>
+                <div>
+                  <span>体积</span>
+                  <b>
+                    {{
+                      selectedModel.source === "upload"
+                        ? formatSize(selectedModel.package_size)
+                        : "—"
+                    }}
+                  </b>
+                </div>
+                <div>
+                  <span>皮肤数</span>
+                  <b>{{ selectedDetail?.skins.length ?? selectedModel.skin_count }}</b>
+                </div>
+              </div>
+
+              <div class="field">
+                <span class="label">显示名</span>
+                <el-input
+                  :model-value="selectedModel.name"
+                  size="small"
+                  @change="(v: string) => saveModelName(selectedModel, v)"
+                />
+              </div>
+              <div class="field row">
+                <span class="label">排序</span>
+                <el-input-number
+                  :model-value="selectedModel.sort"
+                  size="small"
+                  :min="0"
+                  controls-position="right"
+                  class="!w-28"
+                  @change="(v: number) => saveSort(selectedModel, v)"
+                />
+              </div>
+              <div class="field row">
+                <span class="label">启用</span>
+                <el-switch
+                  :model-value="selectedModel.enabled"
+                  @change="(v: boolean) => toggleEnabled(selectedModel, v)"
+                />
+              </div>
+
+              <div class="row-actions">
+                <el-button type="primary" size="small" @click="openAppend">追加装扮</el-button>
+                <el-button size="small" @click="setSiteDefaultQuick">设为站点默认</el-button>
+                <el-popconfirm
+                  v-if="selectedModel.source === 'upload'"
+                  title="确定删除该上传模型及磁盘版本目录？"
+                  @confirm="handleDelete(selectedModel)"
+                >
+                  <template #reference>
+                    <el-button size="small" type="danger">删除</el-button>
+                  </template>
+                </el-popconfirm>
+                <el-tooltip v-else content="内置模型不可物理删除，请禁用">
+                  <el-button size="small" disabled>删除</el-button>
+                </el-tooltip>
+              </div>
+            </div>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <el-button :icon="useRenderIcon('ri:download-cloud-line')" @click="handleImport(false)">
-              导入 model_list
-            </el-button>
-            <el-button @click="openDefaultDialog">设置站点默认</el-button>
-            <el-button
-              type="primary"
-              :icon="useRenderIcon('ri:upload-2-line')"
-              @click="openUpload"
-            >
-              上传 zip
-            </el-button>
+
+          <div class="skins-block">
+            <div class="skins-hd">
+              <h4>装扮</h4>
+              <span class="hint">选中高亮；可改 label / sort；rel_path 只读</span>
+            </div>
+            <div v-if="selectedDetail?.skins?.length" class="skin-grid">
+              <div
+                v-for="skin in selectedDetail.skins"
+                :key="skin.id"
+                class="skin-card"
+                :class="{
+                  selected: selectedSkinId === skin.id,
+                  disabled: !skin.enabled
+                }"
+                @click="selectSkin(skin.id)"
+              >
+                <span
+                  v-if="selectedDetail.default_skin_id === skin.id"
+                  class="corner"
+                >模型默认</span>
+                <div class="thumb" :class="{ placeholder: !skin.preview_url }">
+                  <img
+                    v-if="skin.preview_url"
+                    :src="skin.preview_url"
+                    alt=""
+                    loading="lazy"
+                    @error="($event.target as HTMLImageElement).style.display = 'none'"
+                  />
+                </div>
+                <el-input
+                  :model-value="skin.label"
+                  size="small"
+                  class="label-input"
+                  @click.stop
+                  @change="(v: string) => saveSkinLabel(skin, v)"
+                />
+                <div class="path" :title="skin.rel_path">{{ skin.rel_path }}</div>
+                <div class="foot" @click.stop>
+                  <el-switch
+                    :model-value="skin.enabled"
+                    size="small"
+                    @change="(v: boolean) => toggleSkin(skin, v)"
+                  />
+                  <el-input-number
+                    :model-value="skin.sort"
+                    size="small"
+                    :min="0"
+                    controls-position="right"
+                    class="!w-20"
+                    @change="(v: number) => saveSkinSort(skin, v)"
+                  />
+                  <el-button
+                    v-if="selectedDetail.default_skin_id !== skin.id"
+                    link
+                    type="primary"
+                    @click="setModelDefaultSkin(selectedModel.id, skin.id)"
+                  >
+                    设默认
+                  </el-button>
+                  <el-tag v-else size="small" type="success">默认</el-tag>
+                </div>
+              </div>
+            </div>
+            <el-empty v-else description="该模型暂无装扮" :image-size="72" />
           </div>
         </div>
-      </template>
-
-      <pure-table
-        :loading="loading"
-        :data="dataList"
-        :columns="columns"
-        row-key="id"
-        align-whole="center"
-        header-row-class-name="table-header-gray"
-        @expand-change="onExpandChange"
-      >
-        <template #expand="{ row }">
-          <div class="p-3 text-left" v-loading="expandLoading[row.id]">
-            <div v-if="detailMap[row.id]">
-              <el-table :data="detailMap[row.id].skins" size="small" border>
-                <el-table-column prop="id" label="ID" width="70" />
-                <el-table-column label="Label" min-width="140">
-                  <template #default="{ row: skin }">
-                    <el-input
-                      :model-value="skin.label"
-                      size="small"
-                      @change="(v: string) => saveSkinLabel(skin, v)"
-                    />
-                  </template>
-                </el-table-column>
-                <el-table-column prop="rel_path" label="rel_path" min-width="220" />
-                <el-table-column label="排序" width="110">
-                  <template #default="{ row: skin }">
-                    <el-input-number
-                      :model-value="skin.sort"
-                      size="small"
-                      :min="0"
-                      controls-position="right"
-                      class="!w-24"
-                      @change="(v: number) => saveSkinSort(skin, v)"
-                    />
-                  </template>
-                </el-table-column>
-                <el-table-column label="启用" width="90">
-                  <template #default="{ row: skin }">
-                    <el-switch
-                      :model-value="skin.enabled"
-                      @change="(v: boolean) => toggleSkin(skin, v)"
-                    />
-                  </template>
-                </el-table-column>
-                <el-table-column label="操作" width="160">
-                  <template #default="{ row: skin }">
-                    <el-tag
-                      v-if="detailMap[row.id].default_skin_id === skin.id"
-                      type="success"
-                      size="small"
-                      class="mr-2"
-                    >
-                      模型默认
-                    </el-tag>
-                    <el-button
-                      v-else
-                      link
-                      type="primary"
-                      @click="setModelDefaultSkin(row.id, skin.id)"
-                    >
-                      设为默认
-                    </el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-            <span v-else class="text-gray-400">展开以加载皮肤…</span>
-          </div>
-        </template>
-
-        <template #enabled="{ row }">
-          <el-switch
-            :model-value="row.enabled"
-            @change="(v: boolean) => toggleEnabled(row, v)"
-          />
-        </template>
-
-        <template #operation="{ row }">
-          <el-input-number
-            :model-value="row.sort"
-            size="small"
-            :min="0"
-            controls-position="right"
-            class="!w-24 mr-2"
-            @change="(v: number) => saveSort(row, v)"
-          />
-          <el-button link type="primary" @click="openAppend(row)">追加装扮</el-button>
-          <el-popconfirm
-            v-if="row.source === 'upload'"
-            title="确定删除该上传模型及磁盘文件？"
-            @confirm="handleDelete(row)"
-          >
-            <template #reference>
-              <el-button link type="danger">删除</el-button>
-            </template>
-          </el-popconfirm>
-          <el-tooltip v-else content="内置模型不可物理删除，请禁用">
-            <el-button link disabled>删除</el-button>
-          </el-tooltip>
-        </template>
-      </pure-table>
-    </el-card>
+      </section>
+    </div>
 
     <el-dialog v-model="uploadVisible" title="上传 Cubism2 zip" width="520px">
       <el-form label-width="90px">
@@ -492,20 +729,20 @@ onMounted(onSearch);
       </el-form>
       <template #footer>
         <el-button @click="uploadVisible = false">取消</el-button>
-        <el-button type="primary" :loading="uploading" @click="submitUpload">
-          上传
-        </el-button>
+        <el-button type="primary" :loading="uploading" @click="submitUpload">上传</el-button>
       </template>
     </el-dialog>
 
-        <el-dialog
+    <el-dialog
       v-model="appendVisible"
-      :title="appendTarget ? `追加装扮 · ${appendTarget.name}` : '追加装扮'"
+      :title="selectedModel ? `追加装扮 · ${selectedModel.name}` : '追加装扮'"
       width="520px"
     >
       <el-form label-width="120px">
         <el-form-item label="目标模型">
-          <span v-if="appendTarget">{{ appendTarget.name }} (#{{ appendTarget.id }} / {{ appendTarget.slug }})</span>
+          <span v-if="selectedModel">
+            {{ selectedModel.name }} (#{{ selectedModel.id }} / {{ selectedModel.slug }})
+          </span>
         </el-form-item>
         <el-form-item label="Zip" required>
           <el-upload
@@ -533,7 +770,7 @@ onMounted(onSearch);
       </template>
     </el-dialog>
 
-<el-dialog v-model="defaultDialog" title="站点默认看板娘" width="480px">
+    <el-dialog v-model="defaultDialog" title="站点默认看板娘" width="480px">
       <el-form label-width="100px">
         <el-form-item label="默认模型">
           <el-select
@@ -571,3 +808,389 @@ onMounted(onSearch);
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.live2d-admin {
+  --l2d-border: var(--el-border-color-lighter, #e4e7ed);
+  --l2d-muted: var(--el-text-color-secondary, #909399);
+  --l2d-primary: var(--el-color-primary, #409eff);
+  --l2d-soft: var(--el-color-primary-light-9, #ecf5ff);
+  --l2d-left: 340px;
+  --l2d-preview-h: 380px;
+}
+.top-bar {
+  background: var(--el-bg-color);
+  border: 1px solid var(--l2d-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.title {
+  font-weight: 600;
+  font-size: 15px;
+}
+.defaults-chip {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--l2d-soft);
+  color: var(--l2d-primary);
+  border: 1px solid var(--el-color-primary-light-7, #d9ecff);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.layout {
+  display: grid;
+  grid-template-columns: var(--l2d-left) 1fr;
+  gap: 12px;
+  min-height: 640px;
+}
+.pane {
+  background: var(--el-bg-color);
+  border: 1px solid var(--l2d-border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pane-hd {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--l2d-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 13px;
+}
+.hint {
+  font-weight: 400;
+  color: var(--l2d-muted);
+  font-size: 12px;
+}
+.search {
+  margin: 10px 12px 0;
+  width: calc(100% - 24px);
+}
+.filters {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+}
+.chip {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--l2d-border);
+  color: var(--l2d-muted);
+  cursor: pointer;
+  background: #fff;
+}
+.chip.active {
+  background: var(--l2d-soft);
+  border-color: var(--el-color-primary-light-5, #b3d8ff);
+  color: var(--l2d-primary);
+}
+.model-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px;
+  overflow: auto;
+  flex: 1;
+}
+.model-item {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f2f5;
+  cursor: pointer;
+}
+.model-item:hover {
+  background: #fafafa;
+}
+.model-item.active {
+  background: var(--l2d-soft);
+  box-shadow: inset 3px 0 0 var(--l2d-primary);
+}
+.thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  background: linear-gradient(145deg, #eef2f7, #dfe6ee);
+  border: 1px solid var(--l2d-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  color: var(--l2d-muted);
+  font-size: 11px;
+}
+.thumb.placeholder::after {
+  content: "无预览";
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+.model-meta .name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.model-meta .slug {
+  color: var(--l2d-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+.tags {
+  margin-top: 4px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.tag {
+  font-size: 10px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: #f4f4f5;
+  color: var(--l2d-muted);
+  border: 1px solid #e9e9eb;
+}
+.tag.site {
+  background: #f0f9eb;
+  color: #67c23a;
+  border-color: #e1f3d8;
+}
+.tag.upload {
+  background: #fdf6ec;
+  color: #e6a23c;
+  border-color: #faecd8;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #67c23a;
+}
+.dot.off {
+  background: #c0c4cc;
+}
+.empty-list {
+  padding: 24px 12px;
+  color: var(--l2d-muted);
+  font-size: 13px;
+  text-align: center;
+}
+.main-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.empty-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.preview-row {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 12px;
+}
+.preview-stage {
+  height: var(--l2d-preview-h);
+  border: 1px dashed #dcdfe6;
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, #f0f2f5 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, #f0f2f5 25%, transparent 25%) 0 0 / 16px 16px,
+    #fafbfc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.preview-stage img {
+  max-height: 92%;
+  max-width: 70%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.12));
+  transition: opacity 0.15s ease;
+}
+.preview-caption {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--l2d-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--l2d-muted);
+}
+.fail-note {
+  color: var(--l2d-muted);
+  text-align: center;
+  font-size: 13px;
+}
+.fail-note .sub {
+  font-size: 11px;
+  margin-top: 4px;
+}
+.side-card {
+  border: 1px solid var(--l2d-border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+}
+.side-card h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.kv {
+  font-size: 12px;
+  color: var(--l2d-muted);
+  display: grid;
+  gap: 6px;
+}
+.kv div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.kv b {
+  color: var(--el-text-color-primary);
+  font-weight: 500;
+  text-align: right;
+}
+.field .label {
+  display: block;
+  font-size: 12px;
+  color: var(--l2d-muted);
+  margin-bottom: 4px;
+}
+.field.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.field.row .label {
+  margin: 0;
+}
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+.skins-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.skins-hd h4 {
+  margin: 0;
+  font-size: 13px;
+}
+.skin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.skin-card {
+  border: 1px solid var(--l2d-border);
+  border-radius: 6px;
+  padding: 8px;
+  cursor: pointer;
+  background: #fff;
+  position: relative;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.skin-card:hover {
+  border-color: #c6e2ff;
+}
+.skin-card.selected {
+  border-color: var(--l2d-primary);
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+}
+.skin-card.disabled {
+  opacity: 0.55;
+}
+.skin-card .thumb {
+  width: 100%;
+  height: 88px;
+  margin-bottom: 6px;
+}
+.skin-card .path {
+  font-size: 10px;
+  color: var(--l2d-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 4px;
+}
+.skin-card .foot {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  background: #67c23a;
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .left-pane {
+    max-height: 320px;
+  }
+  .preview-row {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
