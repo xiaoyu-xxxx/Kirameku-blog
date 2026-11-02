@@ -91,3 +91,22 @@ export const uploadLive2DZip = (payload: {
     headers: { "Content-Type": "multipart/form-data" }
   });
 };
+
+export const uploadLive2DSkins = (payload: {
+  modelId: number;
+  file: File;
+  setAsDefault?: boolean;
+}) => {
+  const form = new FormData();
+  form.append("file", payload.file);
+  form.append("set_as_default", String(payload.setAsDefault ?? false));
+  return http.request<Live2DModelDetail>(
+    "post",
+    `/api/live2d/models/${payload.modelId}/skins/upload`,
+    {
+      data: form,
+      headers: { "Content-Type": "multipart/form-data" }
+    }
+  );
+};
+

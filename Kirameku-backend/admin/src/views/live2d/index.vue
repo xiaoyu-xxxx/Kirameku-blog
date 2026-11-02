@@ -11,6 +11,7 @@ import {
   setLive2DDefaults,
   importLive2DModels,
   uploadLive2DZip,
+  uploadLive2DSkins,
   type Live2DModelItem,
   type Live2DModelDetail,
   type Live2DDefaults,
@@ -33,6 +34,14 @@ const uploadForm = ref({
   slug: "",
   enabled: true,
   file: null as File | null
+});
+
+const appendVisible = ref(false);
+const appending = ref(false);
+const appendTarget = ref<Live2DModelItem | null>(null);
+const appendForm = ref({
+  file: null as File | null,
+  setAsDefault: false
 });
 
 const defaultDialog = ref(false);
@@ -76,7 +85,7 @@ const columns: TableColumnList = [
           ? "—"
           : "0"
   },
-  { label: "操作", fixed: "right", width: 280, slot: "operation" }
+  { label: "操作", fixed: "right", width: 360, slot: "operation" }
 ];
 
 function formatSize(n: number) {
@@ -156,6 +165,76 @@ async function toggleSkin(skin: Live2DSkinItem, val: boolean) {
   } catch (e: any) {
     message(e?.message ?? "更新失败", { type: "error" });
     skin.enabled = !val;
+  }
+}
+
+async function saveSkinLabel(skin: Live2DSkinItem, label: string) {
+  const next = (label ?? "").trim();
+  if (!next) {
+    message("label 不能为空", { type: "warning" });
+    delete detailMap.value[skin.model_id];
+    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+    return;
+  }
+  if (next === skin.label) return;
+  try {
+    await updateLive2DSkin(skin.id, { label: next });
+    message("名称已更新", { type: "success" });
+    delete detailMap.value[skin.model_id];
+    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+  } catch (e: any) {
+    message(e?.message ?? "更新失败", { type: "error" });
+    delete detailMap.value[skin.model_id];
+    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+  }
+}
+
+async function saveSkinSort(skin: Live2DSkinItem, sort: number) {
+  const next = Number(sort);
+  if (Number.isNaN(next) || next === skin.sort) return;
+  try {
+    await updateLive2DSkin(skin.id, { sort: next });
+    message("皮肤排序已更新", { type: "success" });
+    delete detailMap.value[skin.model_id];
+    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+  } catch (e: any) {
+    message(e?.message ?? "更新失败", { type: "error" });
+    delete detailMap.value[skin.model_id];
+    await ensureDetail({ id: skin.model_id } as Live2DModelItem);
+  }
+}
+
+function openAppend(row: Live2DModelItem) {
+  appendTarget.value = row;
+  appendForm.value = { file: null, setAsDefault: false };
+  appendVisible.value = true;
+}
+
+function onAppendFileChange(file: any) {
+  appendForm.value.file = file?.raw ?? null;
+}
+
+async function submitAppend() {
+  if (!appendTarget.value) return;
+  if (!appendForm.value.file) {
+    message("请选择 zip", { type: "warning" });
+    return;
+  }
+  appending.value = true;
+  try {
+    const detail = await uploadLive2DSkins({
+      modelId: appendTarget.value.id,
+      file: appendForm.value.file,
+      setAsDefault: appendForm.value.setAsDefault
+    });
+    message("装扮已追加（版本化路径）", { type: "success" });
+    appendVisible.value = false;
+    detailMap.value[appendTarget.value.id] = detail;
+    onSearch();
+  } catch (e: any) {
+    message(e?.message ?? "追加失败", { type: "error" });
+  } finally {
+    appending.value = false;
   }
 }
 
@@ -297,9 +376,28 @@ onMounted(onSearch);
             <div v-if="detailMap[row.id]">
               <el-table :data="detailMap[row.id].skins" size="small" border>
                 <el-table-column prop="id" label="ID" width="70" />
-                <el-table-column prop="label" label="Label" min-width="120" />
+                <el-table-column label="Label" min-width="140">
+                  <template #default="{ row: skin }">
+                    <el-input
+                      :model-value="skin.label"
+                      size="small"
+                      @change="(v: string) => saveSkinLabel(skin, v)"
+                    />
+                  </template>
+                </el-table-column>
                 <el-table-column prop="rel_path" label="rel_path" min-width="220" />
-                <el-table-column prop="sort" label="排序" width="70" />
+                <el-table-column label="排序" width="110">
+                  <template #default="{ row: skin }">
+                    <el-input-number
+                      :model-value="skin.sort"
+                      size="small"
+                      :min="0"
+                      controls-position="right"
+                      class="!w-24"
+                      @change="(v: number) => saveSkinSort(skin, v)"
+                    />
+                  </template>
+                </el-table-column>
                 <el-table-column label="启用" width="90">
                   <template #default="{ row: skin }">
                     <el-switch
@@ -350,6 +448,7 @@ onMounted(onSearch);
             class="!w-24 mr-2"
             @change="(v: number) => saveSort(row, v)"
           />
+          <el-button link type="primary" @click="openAppend(row)">追加装扮</el-button>
           <el-popconfirm
             v-if="row.source === 'upload'"
             title="确定删除该上传模型及磁盘文件？"
@@ -399,7 +498,42 @@ onMounted(onSearch);
       </template>
     </el-dialog>
 
-    <el-dialog v-model="defaultDialog" title="站点默认看板娘" width="480px">
+        <el-dialog
+      v-model="appendVisible"
+      :title="appendTarget ? `追加装扮 · ${appendTarget.name}` : '追加装扮'"
+      width="520px"
+    >
+      <el-form label-width="120px">
+        <el-form-item label="目标模型">
+          <span v-if="appendTarget">{{ appendTarget.name }} (#{{ appendTarget.id }} / {{ appendTarget.slug }})</span>
+        </el-form-item>
+        <el-form-item label="Zip" required>
+          <el-upload
+            :auto-upload="false"
+            :limit="1"
+            accept=".zip,application/zip"
+            :on-change="onAppendFileChange"
+          >
+            <el-button>选择 zip</el-button>
+          </el-upload>
+          <p class="text-xs text-gray-400 mt-1">
+            解压到 model/&lt;slug&gt;/&lt;version&gt;/…，不覆盖已有 immutable URL；多套包全部登记，sort 递增。
+          </p>
+        </el-form-item>
+        <el-form-item label="设为默认皮肤">
+          <el-switch v-model="appendForm.setAsDefault" />
+          <span class="text-xs text-gray-400 ml-2">仅改该模型 default_skin；不改站点默认</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="appendVisible = false">取消</el-button>
+        <el-button type="primary" :loading="appending" @click="submitAppend">
+          上传并追加
+        </el-button>
+      </template>
+    </el-dialog>
+
+<el-dialog v-model="defaultDialog" title="站点默认看板娘" width="480px">
       <el-form label-width="100px">
         <el-form-item label="默认模型">
           <el-select

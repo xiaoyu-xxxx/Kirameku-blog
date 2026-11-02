@@ -26,6 +26,7 @@ from app.schemas.live2d import (
 )
 from app.utils.live2d_storage import (
     delete_version_files,
+    model_slug_root,
     slug_disk_exists,
     versions_from_skin_rel_paths,
     write_package_files,
@@ -125,7 +126,13 @@ def update_skin(session: Session, skin_id: int, data: Live2DSkinUpdate) -> dict:
     row = session.get(Live2DSkin, skin_id)
     if not row:
         raise HTTPException(404, "皮肤不存在")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    payload = data.model_dump(exclude_unset=True)
+    if "label" in payload:
+        label = payload["label"]
+        if not isinstance(label, str) or not label.strip():
+            raise HTTPException(400, "label 不能为空")
+        payload["label"] = label.strip()
+    for k, v in payload.items():
         setattr(row, k, v)
     row.updated_at = _now()
     session.add(row)
@@ -531,3 +538,82 @@ def register_upload(
     session.add(model)
     session.commit()
     return get_model_detail(session, model.id)
+
+
+def append_skins_to_model(
+    session: Session,
+    *,
+    model_id: int,
+    files: list[tuple[str, bytes]],
+    packages: list[dict],
+    set_as_default: bool = False,
+) -> dict:
+    """Append Cubism2 packages as new skins under an existing model.
+
+    Always writes model/<slug>/<version>/... so builtin/immutable URLs are never overwritten.
+    """
+    model = get_model(session, model_id)
+
+    version = time.strftime("%Y%m%d%H%M%S")
+    ver_root = Path(model_slug_root(model.slug)) / version
+    if ver_root.exists():
+        version = f"{version}-{int(time.time() * 1000) % 1000}"
+
+    pkg_dirs = [p["pkg_dir"] for p in packages]
+    common = ""
+    if pkg_dirs and all(pkg_dirs):
+        split_dirs = [d.split("/") for d in pkg_dirs]
+        for parts in zip(*split_dirs):
+            if len(set(parts)) == 1:
+                common = "/".join([*(common.split("/") if common else []), parts[0]]).strip("/")
+            else:
+                break
+
+    strip = packages[0]["pkg_dir"] if len(packages) == 1 else common
+
+    total, _ = write_package_files(
+        slug=model.slug, version=version, files=files, strip_prefix=strip
+    )
+
+    max_sort = session.exec(
+        select(func.max(Live2DSkin.sort)).where(Live2DSkin.model_id == model_id)
+    ).one()
+    next_sort = (max_sort if max_sort is not None else -1) + 1
+
+    first_new_skin_id: int | None = None
+    for j, pkg in enumerate(packages):
+        pkg_dir = pkg["pkg_dir"]
+        if strip and (pkg_dir == strip or pkg_dir.startswith(strip + "/")):
+            inner = pkg_dir[len(strip) :].lstrip("/")
+        else:
+            inner = pkg_dir
+        if inner:
+            rel_path = f"{model.slug}/{version}/{inner}"
+        else:
+            rel_path = f"{model.slug}/{version}"
+        label = pkg.get("label") or (inner.split("/")[-1] if inner else "default")
+        skin = Live2DSkin(
+            model_id=model.id,
+            rel_path=rel_path,
+            label=label,
+            sort=next_sort + j,
+            enabled=True,
+        )
+        session.add(skin)
+        session.commit()
+        session.refresh(skin)
+        if first_new_skin_id is None:
+            first_new_skin_id = skin.id
+
+    if set_as_default and first_new_skin_id is not None:
+        model.default_skin_id = first_new_skin_id
+
+    if model.source == "upload":
+        model.package_size = (model.package_size or 0) + total
+        model.file_count = (model.file_count or 0) + len(files)
+
+    model.updated_at = _now()
+    session.add(model)
+    session.commit()
+    return get_model_detail(session, model.id)
+

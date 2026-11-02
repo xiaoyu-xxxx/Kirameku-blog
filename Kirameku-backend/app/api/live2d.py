@@ -66,6 +66,35 @@ def delete_model(
     return {"ok": True}
 
 
+@admin_router.post("/models/{model_id}/skins/upload", response_model=Live2DModelDetailOut)
+async def upload_skins(
+    model_id: int,
+    file: UploadFile = File(...),
+    set_as_default: bool = Form(False),
+    session: Session = Depends(get_session),
+    user: dict = Depends(get_current_user),
+):
+    """Append Cubism2 zip packages as new skins on an existing model (versioned paths)."""
+    username = user.get("sub") or "admin"
+    check_rate_limit(
+        f"live2d-upload:{username}",
+        limit=LIVE2D_UPLOAD_RATE_LIMIT,
+        window=LIVE2D_UPLOAD_RATE_WINDOW,
+    )
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(400, "仅支持 zip 格式")
+    raw = await file.read()
+    files = extract_live2d_zip(raw)
+    packages = discover_cubism2_packages(files)
+    return live2d_service.append_skins_to_model(
+        session,
+        model_id=model_id,
+        files=files,
+        packages=packages,
+        set_as_default=set_as_default,
+    )
+
+
 @admin_router.put("/skins/{skin_id}", response_model=Live2DSkinOut)
 def update_skin(
     skin_id: int,
