@@ -30,6 +30,15 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  turbopack: {
+    resolveAlias: {
+      // oh-my-live2d 打包产物内 Cubism2 胶水代码存在 require("fs")/require("path")，
+      // 浏览器端把 Node 内建模块别名到空模块，避免构建失败（服务端不受影响）。
+      fs: { browser: "./empty.ts" },
+      path: { browser: "./empty.ts" },
+    },
+  },
+
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [
