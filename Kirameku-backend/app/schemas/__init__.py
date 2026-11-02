@@ -29,6 +29,17 @@ from app.schemas.demo_case import (
 from app.schemas.external_api import ExternalApiCreate, ExternalApiUpdate, ExternalApiOut
 from app.schemas.site_setting import SiteSettingCreate, SiteSettingUpdate, SiteSettingOut
 from app.schemas.about_page import AboutPageUpdate, AboutPageOut
+from app.schemas.live2d import (
+    Live2DSkinOut,
+    Live2DModelOut,
+    Live2DModelDetailOut,
+    Live2DModelUpdate,
+    Live2DSkinUpdate,
+    Live2DDefaultsOut,
+    Live2DDefaultsUpdate,
+    Live2DCatalogOut,
+    Live2DImportResult,
+)
 
 __all__ = [
     "Token", "LoginRequest",
@@ -51,4 +62,8 @@ __all__ = [
     "ExternalApiCreate", "ExternalApiUpdate", "ExternalApiOut",
     "SiteSettingCreate", "SiteSettingUpdate", "SiteSettingOut",
     "AboutPageUpdate", "AboutPageOut",
+    "Live2DSkinOut", "Live2DModelOut", "Live2DModelDetailOut",
+    "Live2DModelUpdate", "Live2DSkinUpdate",
+    "Live2DDefaultsOut", "Live2DDefaultsUpdate",
+    "Live2DCatalogOut", "Live2DImportResult",
 ]

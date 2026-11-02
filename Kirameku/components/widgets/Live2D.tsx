@@ -169,12 +169,33 @@ function asLine(value: string | string[] | undefined): string | undefined {
  * 2) 旧 waifu modelId / modelTexturesId → 迁移；
  * 3) 否则回落到 index 20 / 皮肤 0。
  */
-function resolveInitialIndexes(models: Oml2dModel[]): { modelIndex: number; clothesIndex: number } {
+type Live2DCatalog = {
+  models: string[][];
+  messages?: string[];
+  default_model_index?: number;
+  default_clothes_index?: number;
+  asset_base?: string;
+};
+
+/**
+ * 解析初始模型索引：
+ * 1) OML2D 已持久化 → 沿用（校验范围）；
+ * 2) 旧 waifu modelId / modelTexturesId → 迁移；
+ * 3) 站点公开默认（catalog）；
+ * 4) 否则回落到代码兜底 index 20 / 皮肤 0。
+ */
+function resolveInitialIndexes(
+  models: Oml2dModel[],
+  siteDefault?: { modelIndex?: number; clothesIndex?: number },
+): { modelIndex: number; clothesIndex: number } {
   const modelCount = models.length;
-  const clampModel = (n: number) => (Number.isInteger(n) && n >= 0 && n < modelCount ? n : DEFAULT_MODEL_INDEX % modelCount);
-  const clampClothes = (modelIndex: number, n: number) => {
+  const fallbackModel =
+    modelCount > 0 ? DEFAULT_MODEL_INDEX % modelCount : 0;
+  const clampModel = (n: number) =>
+    Number.isInteger(n) && n >= 0 && n < modelCount ? n : fallbackModel;
+  const clampClothes = (modelIndex: number, n: number, fallback = DEFAULT_CLOTHES_INDEX) => {
     const len = models[modelIndex]?.path.length ?? 1;
-    return Number.isInteger(n) && n >= 0 && n < len ? n : DEFAULT_CLOTHES_INDEX;
+    return Number.isInteger(n) && n >= 0 && n < len ? n : Math.min(fallback, Math.max(0, len - 1));
   };
 
   const storedModel = toInt(localStorage.getItem(OML2D_MODEL_INDEX_KEY));
@@ -195,8 +216,32 @@ function resolveInitialIndexes(models: Oml2dModel[]): { modelIndex: number; clot
     };
   }
 
-  const modelIndex = DEFAULT_MODEL_INDEX % modelCount;
+  const siteModel = siteDefault?.modelIndex;
+  if (Number.isInteger(siteModel)) {
+    const modelIndex = clampModel(siteModel as number);
+    return {
+      modelIndex,
+      clothesIndex: clampClothes(modelIndex, siteDefault?.clothesIndex ?? NaN, DEFAULT_CLOTHES_INDEX),
+    };
+  }
+
+  const modelIndex = fallbackModel;
   return { modelIndex, clothesIndex: DEFAULT_CLOTHES_INDEX };
+}
+
+async function loadLive2DCatalog(): Promise<Live2DCatalog | null> {
+  try {
+    const r = await fetch("/api/public/live2d/catalog", { cache: "no-store" });
+    if (!r.ok) return null;
+    return (await r.json()) as Live2DCatalog;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAssetBase(base: string | undefined): string {
+  const b = (base || "/live2d/").trim() || "/live2d/";
+  return b.endsWith("/") ? b : `${b}/`;
 }
 
 function cleanupOml2dDom(): void {
@@ -734,23 +779,34 @@ export default function Live2D() {
     const prevOnCopy = document.oncopy;
 
     (async () => {
-      const [list, tipsData] = await Promise.all([
-        fetch("/live2d/model_list.json").then((r) => {
-          if (!r.ok) throw new Error(`model_list.json 加载失败: ${r.status}`);
-          return r.json() as Promise<ModelList>;
-        }),
+            const [catalog, tipsData] = await Promise.all([
+        loadLive2DCatalog(),
         fetch("/live2d/waifu-tips.json")
           .then((r) => (r.ok ? (r.json() as Promise<TipsData>) : null))
           .catch(() => null),
       ]);
       if (cancelled) return;
 
+      let list: ModelList | null = catalog
+        ? { models: catalog.models ?? [], messages: catalog.messages }
+        : null;
+      if (!list || !list.models?.length) {
+        list = await fetch("/live2d/model_list.json").then((r) => {
+          if (!r.ok) throw new Error(`model_list.json load failed: ${r.status}`);
+          return r.json() as Promise<ModelList>;
+        });
+      }
+
+      const assetBase = normalizeAssetBase(catalog?.asset_base);
       const models: Oml2dModel[] = (list.models ?? []).map((paths, i) => ({
-        name: list.messages?.[i] ?? `model-${i}`,
-        path: paths.map((p) => `/live2d/model/${p}/index.json`),
+        name: list!.messages?.[i] ?? `model-${i}`,
+        path: paths.map((p) => `${assetBase}model/${p}/index.json`),
       }));
 
-      const { modelIndex, clothesIndex } = resolveInitialIndexes(models);
+      const { modelIndex, clothesIndex } = resolveInitialIndexes(models, {
+        modelIndex: catalog?.default_model_index,
+        clothesIndex: catalog?.default_clothes_index,
+      });
       localStorage.setItem(OML2D_MODEL_INDEX_KEY, String(modelIndex));
       localStorage.setItem(OML2D_MODEL_CLOTHES_INDEX_KEY, String(clothesIndex));
 

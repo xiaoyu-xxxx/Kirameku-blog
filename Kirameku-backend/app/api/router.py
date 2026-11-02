@@ -23,6 +23,7 @@ from app.api.external_apis import router as external_apis_router
 from app.api.site_settings import router as site_settings_router
 from app.api.about_page import router as about_page_router
 from app.api.public_config import router as public_config_router
+from app.api.live2d import admin_router as live2d_admin_router, public_router as live2d_public_router
 
 api_router = APIRouter()
 
@@ -47,3 +48,5 @@ api_router.include_router(external_apis_router)
 api_router.include_router(site_settings_router)
 api_router.include_router(about_page_router)
 api_router.include_router(public_config_router)
+api_router.include_router(live2d_admin_router)
+api_router.include_router(live2d_public_router)

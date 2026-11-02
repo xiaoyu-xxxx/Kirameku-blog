@@ -14,6 +14,7 @@ from app.models.demo_case import DemoCase
 from app.models.external_api import ExternalApi
 from app.models.site_setting import SiteSetting
 from app.models.about_page import AboutPage
+from app.models.live2d import Live2DModel, Live2DSkin
 
 __all__ = [
     "User",
@@ -32,4 +33,6 @@ __all__ = [
     "ExternalApi",
     "SiteSetting",
     "AboutPage",
+    "Live2DModel",
+    "Live2DSkin",
 ]

@@ -94,3 +94,24 @@ DEMO_UPLOAD_RATE_WINDOW = int(os.getenv("DEMO_UPLOAD_RATE_WINDOW", "3600"))
 JINA_READER_BASE = os.getenv("JINA_READER_BASE", "https://r.jina.ai").rstrip("/")
 EXTRACT_HTTP_TIMEOUT = float(os.getenv("EXTRACT_HTTP_TIMEOUT", "25"))
 EXTRACT_MAX_HTML_BYTES = int(os.getenv("EXTRACT_MAX_HTML_BYTES", str(5 * 1024 * 1024)))
+
+# Live2D packages (Cubism2). Completely separate from DEMO_* / demos/ R2.
+# Default local root: monorepo Kirameku/public/live2d so Next can serve /live2d/...
+_default_live2d_root = (BASE_DIR.parent / "Kirameku" / "public" / "live2d")
+LIVE2D_LOCAL_ROOT = Path(
+    os.getenv("LIVE2D_LOCAL_ROOT", str(_default_live2d_root))
+)
+LIVE2D_ASSET_BASE = os.getenv("LIVE2D_ASSET_BASE", "/live2d/").rstrip("/") + "/"
+LIVE2D_MODEL_LIST_PATH = Path(
+    os.getenv(
+        "LIVE2D_MODEL_LIST_PATH",
+        str(LIVE2D_LOCAL_ROOT / "model_list.json"),
+    )
+)
+LIVE2D_MAX_ZIP_BYTES = int(os.getenv("LIVE2D_MAX_ZIP_BYTES", str(40 * 1024 * 1024)))
+LIVE2D_MAX_FILES = int(os.getenv("LIVE2D_MAX_FILES", "200"))
+LIVE2D_MAX_FILE_BYTES = int(os.getenv("LIVE2D_MAX_FILE_BYTES", str(12 * 1024 * 1024)))
+LIVE2D_UPLOAD_RATE_LIMIT = int(os.getenv("LIVE2D_UPLOAD_RATE_LIMIT", "10"))
+LIVE2D_UPLOAD_RATE_WINDOW = int(os.getenv("LIVE2D_UPLOAD_RATE_WINDOW", "3600"))
+LIVE2D_DEFAULT_MODEL_INDEX = int(os.getenv("LIVE2D_DEFAULT_MODEL_INDEX", "20"))
+LIVE2D_DEFAULT_CLOTHES_INDEX = int(os.getenv("LIVE2D_DEFAULT_CLOTHES_INDEX", "0"))
