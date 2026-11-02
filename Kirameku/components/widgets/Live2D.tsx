@@ -37,6 +37,11 @@ const OML2D_MODEL_CLOTHES_INDEX_KEY = "OML2D_MODEL_CLOTHES_INDEX";
 // 旧 waifu autoload.js 的持久化 key（用于迁移）
 const LEGACY_MODEL_ID_KEY = "modelId";
 const LEGACY_MODEL_TEXTURES_ID_KEY = "modelTexturesId";
+// 旧 waifu initDrag 的位置持久化（OML2D 拖拽沿用，便于迁移）
+const WAIFU_POS_KEY = "waifu-pos";
+
+const DRAG_START_TIPS = ["你要带我去哪里呀～", "哇，飞起来了！", "嘿咻嘿咻～", "抓稳啦！", "这是要去哪呢？"];
+const DRAG_END_TIPS = ["就这里好啦！", "这里不错呢～", "放我下来，累死了！", "新家感觉怎么样？", "好，就住这了！"];
 
 // OML2D 挂载到 body 的元素 id（卸载时清理，避免 /garden 等路由切换残留）
 const OML2D_ELEMENT_IDS = [
@@ -102,6 +107,8 @@ type PixiAppLike = {
 };
 
 type Oml2dApi = {
+  onLoad: (fn: (status: "loading" | "success" | "fail") => void) => void;
+  onStageSlideIn: (fn: () => void) => void;
   stageSlideIn: () => Promise<void>;
   stageSlideOut: () => Promise<void>;
   tipsMessage: (message: string, duration: number, priority: number) => void;
@@ -277,6 +284,131 @@ function installLayoutFix(oml2d: Oml2dApi): void {
     arm(models.model);
     return pending;
   };
+}
+
+function clampDrag(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
+/** 从 localStorage 恢复旧 waifu 保存的 left/top（有则覆盖 OML2D 默认 dock）。 */
+function applySavedWaifuPosition(stage: HTMLElement): boolean {
+  const saved = localStorage.getItem(WAIFU_POS_KEY);
+  if (!saved) return false;
+  try {
+    const { left, top } = JSON.parse(saved) as { left: number; top: number };
+    stage.style.transition = "none";
+    stage.style.animation = "none";
+    stage.style.transform = "none";
+    stage.style.left = `${left}px`;
+    stage.style.top = `${top}px`;
+    stage.style.right = "auto";
+    stage.style.bottom = "auto";
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 与旧 waifu-tips.js initDrag 对等的 #oml2d-stage 拖拽；菜单区域不触发拖。 */
+function installStageDrag(oml2d: Oml2dApi): () => void {
+  const stage = document.getElementById("oml2d-stage");
+  if (!stage) return () => {};
+
+  let dragging = false;
+  let moved = false;
+  let startX = 0;
+  let startY = 0;
+  let origLeft = 0;
+  let origTop = 0;
+
+  const getPos = () => {
+    const r = stage.getBoundingClientRect();
+    return { left: r.left, top: r.top };
+  };
+
+  const onStart = (e: MouseEvent | TouchEvent) => {
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest("#oml2d-menus")) return;
+    e.preventDefault();
+    dragging = true;
+    stage.style.transition = "none";
+    stage.style.animation = "none";
+    const ev = "touches" in e ? e.touches[0] : e;
+    const pos = getPos();
+    startX = ev.clientX;
+    startY = ev.clientY;
+    origLeft = pos.left;
+    origTop = pos.top;
+    moved = false;
+  };
+
+  const onMove = (e: MouseEvent | TouchEvent) => {
+    if (!dragging) return;
+    e.preventDefault();
+    if (!moved) {
+      moved = true;
+      oml2d.tipsMessage(pick(DRAG_START_TIPS), 2000, 8);
+    }
+    const ev = "touches" in e ? e.touches[0] : e;
+    const w = stage.offsetWidth;
+    const h = stage.offsetHeight;
+    const newLeft = clampDrag(origLeft + ev.clientX - startX, 0, window.innerWidth - w);
+    const newTop = clampDrag(origTop + ev.clientY - startY, 0, window.innerHeight - h);
+    stage.style.left = `${newLeft}px`;
+    stage.style.top = `${newTop}px`;
+    stage.style.right = "auto";
+    stage.style.bottom = "auto";
+    stage.style.transform = "none";
+  };
+
+  const onEnd = () => {
+    if (!dragging) return;
+    dragging = false;
+    if (!moved) return;
+    localStorage.setItem(
+      WAIFU_POS_KEY,
+      JSON.stringify({
+        left: parseInt(stage.style.left, 10),
+        top: parseInt(stage.style.top, 10),
+      }),
+    );
+    const block = (ev: Event) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
+    stage.addEventListener("click", block, { capture: true, once: true });
+    window.setTimeout(() => stage.removeEventListener("click", block, { capture: true }), 100);
+    oml2d.tipsMessage(pick(DRAG_END_TIPS), 3000, 8);
+  };
+
+  stage.addEventListener("mousedown", onStart);
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onEnd);
+  stage.addEventListener("touchstart", onStart, { passive: false });
+  window.addEventListener("touchmove", onMove, { passive: false });
+  window.addEventListener("touchend", onEnd);
+
+  return () => {
+    stage.removeEventListener("mousedown", onStart);
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onEnd);
+    stage.removeEventListener("touchstart", onStart);
+    window.removeEventListener("touchmove", onMove);
+    window.removeEventListener("touchend", onEnd);
+  };
+}
+
+function installWaifuPositionPersistence(oml2d: Oml2dApi): void {
+  const sync = () => {
+    const stage = document.getElementById("oml2d-stage");
+    if (stage) applySavedWaifuPosition(stage);
+  };
+  // 模型 reload / slideIn 会 resetStyle 覆盖 dock，有保存位置时在滑入后再贴回去
+  oml2d.onStageSlideIn(sync);
+  oml2d.onLoad((status) => {
+    if (status === "success") sync();
+  });
 }
 
 function installMenuHoverFix(oml2d: Oml2dApi): void {
@@ -570,6 +702,7 @@ export default function Live2D() {
     let cancelled = false;
     let instance: Oml2dApi | null = null;
     let unbindTips: (() => void) | null = null;
+    let unbindDrag: (() => void) | null = null;
     // OML2D 会覆盖 document.oncopy（复制提示），卸载时恢复
     const prevOnCopy = document.oncopy;
 
@@ -639,6 +772,8 @@ export default function Live2D() {
 
       installLayoutFix(instance);
       installMenuHoverFix(instance);
+      installWaifuPositionPersistence(instance);
+      unbindDrag = installStageDrag(instance);
       unbindTips = bindLegacyTips(instance, tipsData);
     })().catch((err) => {
       console.error("[Live2D] OhMyLive2D 初始化失败：", err);
@@ -647,6 +782,7 @@ export default function Live2D() {
     return () => {
       cancelled = true;
       unbindTips?.();
+      unbindDrag?.();
       // OML2D 0.19.3 无公开 destroy；用「停止渲染循环 + 移除 DOM」兜底，避免路由切换泄漏
       const app = instance?.pixiApp?.app as { destroy?: (removeView?: boolean) => void } | undefined;
       app?.destroy?.(true);
