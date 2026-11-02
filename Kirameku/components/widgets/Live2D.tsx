@@ -8,6 +8,14 @@ import Script from "next/script";
  *
  * 回退开关：NEXT_PUBLIC_USE_OML2D=false 时恢复旧 `autoload.js` 方案。
  * 注意 NEXT_PUBLIC_* 在构建时内联，仅在构建/部署层切换，勿在运行时动态改。
+ *
+ * 视觉与旧 `#waifu` / `#live2d`（350×350）对齐：
+ * - Cubism2 的 model json 经常只写 `layout.width`。pixi-live2d 会把缺省的 height
+ *   当成 2，于是 X/Y 缩放不一致，形象被纵向拉长。这里按旧 live2d 控件的
+ *   ModelMatrix.setWidth 改回等比缩放，再放进 350px 方形舞台。
+ * - 菜单在舞台内部。舞台 z-index 仍是 40（不盖过页面其它浮层），但菜单必须高于
+ *   舞台里 z-index 9998 的 canvas，否则点击落在画布上。另外库用 mouseout 控制
+ *   显隐，事件会从子元素冒泡，鼠标移向按钮时菜单会被立刻藏起来。
  */
 const USE_OML2D = process.env.NEXT_PUBLIC_USE_OML2D !== "false";
 
@@ -16,6 +24,11 @@ const MIN_WIDTH = 768;
 // 与现网 autoload.js 对齐：默认角色 index 20（za/zastavam21_2104/normal）、皮肤 0
 const DEFAULT_MODEL_INDEX = 20;
 const DEFAULT_CLOTHES_INDEX = 0;
+
+// 旧 `#live2d` 的 CSS 尺寸（right.css）
+const STAGE_SIZE = 350;
+// Cubism2 逻辑画布边长（ModelMatrix 的 -1..1）
+const LOGICAL_SIZE = 2;
 
 // OML2D 自带的持久化 key
 const OML2D_MODEL_INDEX_KEY = "OML2D_MODEL_INDEX";
@@ -32,22 +45,109 @@ const OML2D_ELEMENT_IDS = [
   "oml2d-tips",
   "oml2d-menus",
   "oml2d-global-style",
+  "oml2d-extra-icons",
 ];
+
+// 舞台内 canvas 的 z-index（库写死 9998）。菜单必须比它高，否则按钮点不到。
+const MENU_Z_INDEX = "10000";
 
 type ModelList = { models: string[][]; messages?: string[] };
 
-type Oml2dModel = { name?: string; path: string[] };
-
-type Oml2dInstance = {
-  stageSlideOut: () => Promise<void>;
-  // OML2D 0.19.3 未公开销毁 API，这里访问内部 Pixi Application 用于停止渲染循环
-  pixiApp?: { app?: { destroy?: (removeView?: boolean) => void } };
+type Oml2dModel = {
+  name?: string;
+  path: string[];
+  scale?: number;
+  mobileScale?: number;
+  position?: [number, number];
+  stageStyle?: { width?: number; height?: number };
 };
+
+type MatrixLike = {
+  identity: () => void;
+  scale: (x: number, y?: number) => void;
+  translate: (x: number, y: number) => void;
+};
+
+type InternalModelLike = {
+  originalWidth: number;
+  originalHeight: number;
+  width: number;
+  height: number;
+  localTransform: MatrixLike;
+  settings?: { layout?: Record<string, number> };
+  coreModel?: { getCanvasWidth?: () => number };
+};
+
+type Live2DModelLike = {
+  __layoutArmed?: boolean;
+  on: (event: string, cb: () => void) => void;
+  internalModel?: InternalModelLike;
+};
+
+type ModelsApi = {
+  __layoutHooked?: boolean;
+  model?: Live2DModelLike;
+  currentModelOptions?: Oml2dModel;
+  create: () => Promise<unknown>;
+};
+
+type MenusApi = {
+  __hoverPatched?: boolean;
+  reload: (stage: HTMLElement) => void;
+};
+
+type PixiAppLike = {
+  stage?: unknown;
+  renderer?: { plugins?: { extract?: { canvas: (target: unknown) => HTMLCanvasElement } } };
+};
+
+type Oml2dApi = {
+  stageSlideIn: () => Promise<void>;
+  stageSlideOut: () => Promise<void>;
+  tipsMessage: (message: string, duration: number, priority: number) => void;
+  loadNextModel: () => Promise<void>;
+  loadNextModelClothes: () => Promise<void>;
+  clearTips: () => void;
+  statusBarOpen: (content?: string, color?: string) => void;
+  statusBarClose: (content?: string, delay?: number, color?: string) => void;
+  setStatusBarClickEvent: (fn: () => void | Promise<void>) => void;
+  statusBarClearEvents: () => void;
+  pixiApp?: { app?: PixiAppLike };
+  models?: ModelsApi;
+  menus?: MenusApi;
+};
+
+type TipRule = { selector: string; text: string | string[] };
+type TipsData = {
+  mouseover?: TipRule[];
+  click?: TipRule[];
+  seasons?: { date: string; text: string | string[] }[];
+  time?: { hour: string; text: string | string[] }[];
+  message?: { default?: string[]; copy?: string; visibilitychange?: string; console?: string };
+};
+
+const EXTRA_ICONS = `
+<symbol id="icon-hitokoto" viewBox="0 0 512 512"><path d="M512 240c0 114.9-114.6 208-256 208c-37.1 0-72.3-6.4-104.1-17.9c-11.9 8.7-31.3 20.6-54.3 30.6C73.6 471.1 44.7 480 16 480c-6.5 0-12.3-3.9-14.8-9.9c-2.5-6-1.1-12.8 3.4-17.4l0 0 0 0 0 0 0 0 .3-.3c.3-.3 .7-.7 1.3-1.4c1.1-1.2 2.8-3.1 4.9-5.7c4.1-5 9.6-12.4 15.2-21.6c10-16.6 19.5-38.4 21.4-62.9C17.7 326.8 0 285.1 0 240C0 125.1 114.6 32 256 32s256 93.1 256 208z"/></symbol>
+<symbol id="icon-asteroids" viewBox="0 0 512 512"><path d="M498.1 5.6c10.1 7 15.4 19.1 13.5 31.2l-64 416c-1.5 9.7-7.4 18.2-16 23s-18.9 5.4-28 1.6L284 427.7l-68.5 74.1c-8.9 9.7-22.9 12.9-35.2 8.1S160 493.2 160 480V396.4c0-4 1.5-7.8 4.2-10.7L331.8 202.8c5.8-6.3 5.6-16-.4-22s-15.7-6.4-22-.7L106 360.8 17.7 316.6C7.1 311.3 .3 300.7 0 288.9s5.9-22.8 16.1-28.7l448-256c10.7-6.1 23.9-5.5 34 1.4z"/></symbol>
+<symbol id="icon-photo" viewBox="0 0 512 512"><path d="M220.6 121.2L271.1 96 448 96v96H333.2c-21.9-15.1-48.5-24-77.2-24s-55.2 8.9-77.2 24H64V128H192c9.9 0 19.7-2.3 28.6-6.8zM0 128V416c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H271.1c-9.9 0-19.7 2.3-28.6 6.8L192 64H160V48c0-8.8-7.2-16-16-16H80c-8.8 0-16 7.2-16 16l0 16C28.7 64 0 92.7 0 128zM168 304a88 88 0 1 1 176 0 88 88 0 1 1 -176 0z"/></symbol>
+<symbol id="icon-info" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336h24V272H216c-13.3 0-24-10.7-24-24s10.7-24 24-24h48c13.3 0 24 10.7 24 24v88h8c13.3 0 24 10.7 24 24s-10.7 24-24 24H216c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></symbol>
+<symbol id="icon-quit" viewBox="0 0 384 512"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z"/></symbol>
+`;
 
 function toInt(value: string | null): number {
   if (value === null) return NaN;
   const n = Number(value);
   return Number.isInteger(n) ? n : NaN;
+}
+
+function pick<T>(value: T | T[]): T {
+  return Array.isArray(value) ? value[Math.floor(Math.random() * value.length)] : value;
+}
+
+function asLine(value: string | string[] | undefined): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return undefined;
 }
 
 /**
@@ -92,6 +192,373 @@ function cleanupOml2dDom(): void {
   }
 }
 
+function ensureExtraIcons(): void {
+  if (document.getElementById("oml2d-extra-icons")) return;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.id = "oml2d-extra-icons";
+  svg.setAttribute("aria-hidden", "true");
+  svg.style.cssText = "position:absolute;width:0;height:0;overflow:hidden";
+  svg.innerHTML = EXTRA_ICONS;
+  document.body.prepend(svg);
+}
+
+/**
+ * 把 Cubism2 非等比 layout 改回旧控件的等比缩放，并让模型落在 350px 方形舞台里。
+ * 返回是否写进了当前模型选项（scale / position / stageStyle）。
+ */
+function fitModelToLegacyStage(model: Live2DModelLike, options: Oml2dModel | undefined): void {
+  const internal = model.internalModel;
+  if (!internal?.localTransform || !options) return;
+
+  // 仅 Cubism2 有 getCanvasWidth。Cubism3/4 的 layout 语义不同，不要改。
+  if (typeof internal.coreModel?.getCanvasWidth === "function") {
+    const layout = internal.settings?.layout;
+    if (layout && (typeof layout.width === "number" || typeof layout.height === "number")) {
+      const mapped: Record<string, number> = {};
+      for (const key of Object.keys(layout)) {
+        const name = key === "center_x" ? "centerX" : key === "center_y" ? "centerY" : key;
+        mapped[name] = layout[key];
+      }
+      // 与 Live2D Framework 一致：setWidth 再 setHeight，后者覆盖，两轴同一比例。
+      const uniform = (typeof mapped.height === "number" ? mapped.height : mapped.width) / LOGICAL_SIZE;
+      const box: Record<string, number> = { width: LOGICAL_SIZE, height: LOGICAL_SIZE, ...mapped };
+      const width = internal.originalWidth * uniform;
+      const height = internal.originalHeight * uniform;
+      const offsetX =
+        (box.x !== undefined && box.x - box.width / 2) ||
+        (box.centerX !== undefined && box.centerX) ||
+        (box.left !== undefined && box.left - box.width / 2) ||
+        (box.right !== undefined && box.right + box.width / 2) ||
+        0;
+      const offsetY =
+        (box.y !== undefined && box.y - box.height / 2) ||
+        (box.centerY !== undefined && box.centerY) ||
+        (box.top !== undefined && box.top - box.height / 2) ||
+        (box.bottom !== undefined && box.bottom + box.height / 2) ||
+        0;
+      internal.localTransform.identity();
+      internal.localTransform.scale(uniform, uniform);
+      internal.localTransform.translate(width * offsetX, -height * offsetY);
+      internal.width = width;
+      internal.height = height;
+    }
+  }
+
+  const ow = internal.originalWidth;
+  const oh = internal.originalHeight;
+  if (!ow || !oh) return;
+
+  // 旧控件把逻辑宽度 2 映射到整块方形画布。layout 缩小后的模型居中，四周留白。
+  const outer = Math.min(STAGE_SIZE / ow, STAGE_SIZE / oh);
+  const displayW = internal.width * outer;
+  const displayH = internal.height * outer;
+  options.scale = outer;
+  options.mobileScale = outer;
+  options.position = [(STAGE_SIZE - displayW) / 2, (STAGE_SIZE - displayH) / 2];
+  options.stageStyle = { width: STAGE_SIZE, height: STAGE_SIZE };
+}
+
+function installLayoutFix(oml2d: Oml2dApi): void {
+  const models = oml2d.models;
+  if (!models || models.__layoutHooked) return;
+  models.__layoutHooked = true;
+
+  const arm = (model: Live2DModelLike | undefined) => {
+    if (!model || model.__layoutArmed) return;
+    model.__layoutArmed = true;
+    // 必须挂在库自己的 load 回调之后、settingModel 之前。load 在 await 之后才派发，这里来得及。
+    model.on("load", () => fitModelToLegacyStage(model, models.currentModelOptions));
+  };
+
+  arm(models.model);
+  const orig = models.create.bind(models);
+  models.create = () => {
+    const pending = orig();
+    arm(models.model);
+    return pending;
+  };
+}
+
+function installMenuHoverFix(oml2d: Oml2dApi): void {
+  const menus = oml2d.menus;
+  if (!menus || menus.__hoverPatched) return;
+  menus.__hoverPatched = true;
+  const orig = menus.reload.bind(menus);
+  menus.reload = (stage: HTMLElement) => {
+    orig(stage);
+    const menuEl = document.getElementById("oml2d-menus");
+    if (!stage || !menuEl) return;
+    menuEl.style.zIndex = MENU_Z_INDEX;
+    // mouseout 会从 canvas 冒泡，移向按钮时把菜单 visibility 设成 hidden。
+    stage.onmouseover = null;
+    stage.onmouseout = null;
+    stage.onmouseenter = () => {
+      menuEl.style.opacity = "1";
+      menuEl.style.visibility = "visible";
+    };
+    stage.onmouseleave = () => {
+      menuEl.style.opacity = "0";
+      menuEl.style.visibility = "hidden";
+    };
+  };
+}
+
+function welcomeFromTips(data: TipsData | null): Record<string, string> {
+  const time = data?.time ?? [];
+  const at = (hour: number) => asLine(time.find((rule) => {
+    const [start, end] = rule.hour.split("-").map(Number);
+    return hour >= start && hour <= end;
+  })?.text);
+  return {
+    daybreak: at(6) ?? "早上好！一日之计在于晨，美好的一天就要开始了～",
+    morning: at(9) ?? "上午好！工作顺利嘛，不要久坐，多起来走动走动哦！",
+    noon: at(12) ?? "中午了，工作了一个上午，现在是午餐时间！",
+    afternoon: at(15) ?? "午后很容易犯困呢，今天的运动目标完成了吗？",
+    dusk: at(18) ?? "傍晚了！窗外夕阳的景色很美丽呢，最美不过夕阳红～",
+    night: at(20) ?? "晚上好，今天过得怎么样？",
+    lateNight: at(22) ?? "已经这么晚了呀，早点休息吧，晚安～",
+    weeHours: at(1) ?? "你是夜猫子呀？这么晚还不睡觉，明天起的来嘛？",
+  };
+}
+
+function idleLines(data: TipsData | null): string[] {
+  const lines = [...(data?.message?.default ?? [])];
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  for (const season of data?.seasons ?? []) {
+    const [start, end] = season.date.split("-");
+    const [sm, sd] = start.split("/").map(Number);
+    const [em, ed] = (end ?? start).split("/").map(Number);
+    const afterStart = month > sm || (month === sm && day >= sd);
+    const beforeEnd = month < em || (month === em && day <= ed);
+    if (!afterStart || !beforeEnd) continue;
+    const line = asLine(pick(season.text));
+    if (line) lines.push(line.replaceAll("{year}", String(now.getFullYear())));
+  }
+  return lines;
+}
+
+function legacyGreeting(data: TipsData | null): string {
+  let locationStr = "";
+  try {
+    const raw = sessionStorage.getItem("visitor_location");
+    if (raw) {
+      const loc = JSON.parse(raw) as { region?: string; city?: string };
+      locationStr = [loc.region, loc.city].filter(Boolean).join("");
+    }
+  } catch {
+    locationStr = "";
+  }
+
+  if (location.pathname === "/") {
+    return locationStr
+      ? `欢迎来自 <span>${locationStr}</span> 的朋友～<br>祝您在这里玩得开心！`
+      : "欢迎来到这里～<br>祝您玩得开心！";
+  }
+
+  const title = `欢迎阅读<span>「${document.title.split(" - ")[0]}」</span>`;
+  if (!data) return title;
+  if (document.referrer !== "") {
+    try {
+      const ref = new URL(document.referrer);
+      if (location.hostname === ref.hostname) return title;
+      const site = ref.hostname.split(".")[1];
+      const map: Record<string, string> = { baidu: "百度", so: "360搜索", google: "谷歌搜索" };
+      const from = site in map ? map[site] : ref.hostname;
+      return locationStr
+        ? `Hello！来自 <span>${from}</span> 的 ${locationStr} 朋友<br>${title}`
+        : `Hello！来自 <span>${from}</span> 的朋友<br>${title}`;
+    } catch {
+      return title;
+    }
+  }
+  return locationStr ? `欢迎来自 <span>${locationStr}</span> 的朋友～<br>${title}` : title;
+}
+
+function bindLegacyTips(oml2d: Oml2dApi, data: TipsData | null): () => void {
+  let hovered: Element | null = null;
+  const match = (event: Event, rules: TipRule[] | undefined) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !rules) return;
+    for (const rule of rules) {
+      const selector = rule.selector === "#live2d" ? "#oml2d-canvas" : rule.selector;
+      const el = target.closest(selector);
+      if (!el) continue;
+      if (event.type === "mouseover") {
+        if (hovered === el) return;
+        hovered = el;
+      }
+      const msg = pick(rule.text).replaceAll("{text}", (el.textContent || "").trim());
+      oml2d.tipsMessage(msg, 4000, 8);
+      return;
+    }
+  };
+
+  const onOver = (event: Event) => match(event, data?.mouseover);
+  const onClick = (event: Event) => match(event, data?.click);
+  const onVis = () => {
+    if (!document.hidden && data?.message?.visibilitychange) {
+      oml2d.tipsMessage(data.message.visibilitychange, 6000, 9);
+    }
+  };
+  window.addEventListener("mouseover", onOver);
+  window.addEventListener("click", onClick);
+  document.addEventListener("visibilitychange", onVis);
+
+  const greetingTimer = window.setTimeout(() => {
+    oml2d.tipsMessage(legacyGreeting(data), 7000, 11);
+  }, 1200);
+
+  let locationTimer = 0;
+  if (location.pathname === "/" && !sessionStorage.getItem("visitor_location")) {
+    let retries = 0;
+    locationTimer = window.setInterval(() => {
+      retries += 1;
+      try {
+        const raw = sessionStorage.getItem("visitor_location");
+        if (raw) {
+          window.clearInterval(locationTimer);
+          const loc = JSON.parse(raw) as { region?: string; city?: string };
+          const where = [loc.region, loc.city].filter(Boolean).join("");
+          if (where) {
+            oml2d.tipsMessage(`欢迎来自 <span>${where}</span> 的朋友～<br>祝您在这里玩得开心！`, 7000, 12);
+          }
+        }
+      } catch {
+        window.clearInterval(locationTimer);
+      }
+      if (retries > 20) window.clearInterval(locationTimer);
+    }, 300);
+  }
+
+  return () => {
+    window.removeEventListener("mouseover", onOver);
+    window.removeEventListener("click", onClick);
+    document.removeEventListener("visibilitychange", onVis);
+    window.clearTimeout(greetingTimer);
+    if (locationTimer) window.clearInterval(locationTimer);
+  };
+}
+
+function capturePhoto(oml2d: Oml2dApi): void {
+  oml2d.tipsMessage("照好了嘛，是不是很可爱呢？", 6000, 9);
+  try {
+    const app = oml2d.pixiApp?.app;
+    const canvas = app?.renderer?.plugins?.extract?.canvas(app.stage);
+    if (!canvas) throw new Error("extract unavailable");
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = "photo.png";
+    link.click();
+  } catch {
+    oml2d.tipsMessage("拍照失败了，再试一次吧～", 4000, 9);
+  }
+}
+
+function playAsteroids(oml2d: Oml2dApi): void {
+  const w = window as Window & { Asteroids?: new () => unknown; ASTEROIDSPLAYERS?: unknown[] };
+  if (w.Asteroids) {
+    if (!w.ASTEROIDSPLAYERS) w.ASTEROIDSPLAYERS = [];
+    w.ASTEROIDSPLAYERS.push(new w.Asteroids());
+    return;
+  }
+  const script = document.createElement("script");
+  script.src = "/live2d/asteroids.js";
+  script.onerror = () => oml2d.tipsMessage("小游戏加载失败了……", 4000, 9);
+  document.head.appendChild(script);
+}
+
+function buildMenus() {
+  return () => ({
+    // 停靠右侧时库会把菜单放到舞台左侧（left: 10px），这里只补垂直位置和层级。
+    style: {
+      top: "50px",
+      bottom: "auto",
+      zIndex: MENU_Z_INDEX,
+      fontSize: "22px",
+    },
+    itemStyle: {
+      backgroundColor: "transparent",
+      boxShadow: "none",
+      width: "28px",
+      height: "40px",
+      borderRadius: "0px",
+    },
+    items: [
+      {
+        id: "waifu-tool-hitokoto",
+        icon: "icon-hitokoto",
+        title: "一言",
+        onClick(oml2d: Oml2dApi) {
+          fetch(`https://v1.hitokoto.cn?${Date.now()}`)
+            .then((r) => r.json())
+            .then((d: { hitokoto?: string }) => {
+              oml2d.tipsMessage(d.hitokoto || "……", 6000, 9);
+            })
+            .catch(() => oml2d.tipsMessage("一言没取到，稍后再试吧～", 4000, 9));
+        },
+      },
+      {
+        id: "waifu-tool-asteroids",
+        icon: "icon-asteroids",
+        title: "飞机大战",
+        onClick(oml2d: Oml2dApi) {
+          playAsteroids(oml2d);
+        },
+      },
+      {
+        id: "waifu-tool-switch-model",
+        icon: "icon-switch",
+        title: "切换看板娘",
+        onClick(oml2d: Oml2dApi) {
+          void oml2d.loadNextModel();
+        },
+      },
+      {
+        id: "waifu-tool-switch-texture",
+        icon: "icon-skin",
+        title: "切换衣服",
+        onClick(oml2d: Oml2dApi) {
+          void oml2d.loadNextModelClothes();
+        },
+      },
+      {
+        id: "waifu-tool-photo",
+        icon: "icon-photo",
+        title: "拍照",
+        onClick(oml2d: Oml2dApi) {
+          capturePhoto(oml2d);
+        },
+      },
+      {
+        id: "waifu-tool-info",
+        icon: "icon-info",
+        title: "关于",
+        onClick() {
+          window.open("https://hiromu.top/");
+        },
+      },
+      {
+        id: "waifu-tool-quit",
+        icon: "icon-quit",
+        title: "再见",
+        onClick(oml2d: Oml2dApi) {
+          oml2d.tipsMessage("愿你有一天能与重要的人重逢。", 2000, 11);
+          oml2d.clearTips();
+          oml2d.statusBarOpen("看板娘休息中");
+          oml2d.setStatusBarClickEvent(() => {
+            oml2d.statusBarClose();
+            void oml2d.stageSlideIn();
+            oml2d.statusBarClearEvents();
+          });
+          void oml2d.stageSlideOut();
+        },
+      },
+    ],
+  });
+}
+
 export default function Live2D() {
   useEffect(() => {
     // 回退方案：旧 autoload.js 内部自行判断宽度
@@ -101,15 +568,21 @@ export default function Live2D() {
     if (window.innerWidth < MIN_WIDTH) return;
 
     let cancelled = false;
-    let instance: Oml2dInstance | null = null;
+    let instance: Oml2dApi | null = null;
+    let unbindTips: (() => void) | null = null;
     // OML2D 会覆盖 document.oncopy（复制提示），卸载时恢复
     const prevOnCopy = document.oncopy;
 
     (async () => {
-      const list: ModelList = await fetch("/live2d/model_list.json").then((r) => {
-        if (!r.ok) throw new Error(`model_list.json 加载失败: ${r.status}`);
-        return r.json();
-      });
+      const [list, tipsData] = await Promise.all([
+        fetch("/live2d/model_list.json").then((r) => {
+          if (!r.ok) throw new Error(`model_list.json 加载失败: ${r.status}`);
+          return r.json() as Promise<ModelList>;
+        }),
+        fetch("/live2d/waifu-tips.json")
+          .then((r) => (r.ok ? (r.json() as Promise<TipsData>) : null))
+          .catch(() => null),
+      ]);
       if (cancelled) return;
 
       const models: Oml2dModel[] = (list.models ?? []).map((paths, i) => ({
@@ -121,27 +594,62 @@ export default function Live2D() {
       localStorage.setItem(OML2D_MODEL_INDEX_KEY, String(modelIndex));
       localStorage.setItem(OML2D_MODEL_CLOTHES_INDEX_KEY, String(clothesIndex));
 
+      ensureExtraIcons();
+
       const { loadOml2d } = await import("oh-my-live2d");
       if (cancelled) return;
+
+      const welcome = welcomeFromTips(tipsData);
+      const idle = idleLines(tipsData);
+      const copyMessage = tipsData?.message?.copy;
 
       instance = loadOml2d({
         models,
         dockedPosition: "right",
         mobileDisplay: false,
         sayHello: false,
-        // 与现网 waifu 同量级（z-index 40），避免盖过 Toolbox / FloatingPlayer
+        // 状态条沿用旧 #waifu-toggle 的橙色；页面层级仍是 40 这一档
+        primaryColor: "#fa0",
+        // 只抬舞台本身。菜单的 z-index 在舞台内部，不能跟舞台一起写成 40。
         stageStyle: { zIndex: "40" },
-        statusBar: { style: { zIndex: "40" } },
-        menus: { style: { zIndex: "40" } },
-      }) as Oml2dInstance;
+        statusBar: { style: { zIndex: "41" } },
+        tips: () => ({
+          style: {
+            width: 280,
+            minHeight: "70px",
+            top: "-70px",
+            left: "20px",
+            transform: "none",
+            fontSize: "14px",
+            lineHeight: "24px",
+            padding: "5px 10px",
+            borderRadius: "12px",
+            backgroundColor: "rgba(236, 217, 188, 0.5)",
+            border: "1px solid rgba(224, 186, 140, 0.62)",
+            boxShadow: "0 3px 15px 2px rgba(191, 158, 118, 0.2)",
+            color: "#5c4030",
+            pointerEvents: "none",
+          },
+          ...(idle.length ? { idleTips: { message: idle, interval: 20000, duration: 6000 } } : {}),
+          welcomeTips: { message: welcome, duration: 6000 },
+          ...(copyMessage ? { copyTips: { message: [copyMessage], duration: 6000 } } : {}),
+        }),
+        menus: buildMenus(),
+      }) as Oml2dApi;
+
+      installLayoutFix(instance);
+      installMenuHoverFix(instance);
+      unbindTips = bindLegacyTips(instance, tipsData);
     })().catch((err) => {
       console.error("[Live2D] OhMyLive2D 初始化失败：", err);
     });
 
     return () => {
       cancelled = true;
+      unbindTips?.();
       // OML2D 0.19.3 无公开 destroy；用「停止渲染循环 + 移除 DOM」兜底，避免路由切换泄漏
-      instance?.pixiApp?.app?.destroy?.(true);
+      const app = instance?.pixiApp?.app as { destroy?: (removeView?: boolean) => void } | undefined;
+      app?.destroy?.(true);
       cleanupOml2dDom();
       document.oncopy = prevOnCopy;
     };
