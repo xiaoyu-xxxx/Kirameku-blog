@@ -172,9 +172,58 @@ input, textarea, [contenteditable], .prose, code, pre {
 /* 移动端隐藏看板娘 */
 @media (max-width: 767px) {
   #waifu,
-  #waifu-toggle {
+  #waifu-toggle,
+  #oml2d-stage,
+  #oml2d-statusBar,
+  #oml2d-menus {
     display: none !important;
   }
+}
+
+/* OhMyLive2D：对齐旧 waifu 工具条（扁平图标，不要圆形白底按钮） */
+#oml2d-menus {
+  pointer-events: auto;
+}
+
+#oml2d-menus .oml2d-menus-item {
+  background: transparent;
+  box-shadow: none;
+  color: #7b8c9d;
+  border-radius: 0;
+}
+
+#oml2d-menus .oml2d-menus-item:not(:last-child) {
+  margin-bottom: 0;
+}
+
+#oml2d-menus .oml2d-menus-item:hover {
+  background: transparent;
+  color: #0684bd;
+  box-shadow: none;
+}
+
+.dark #oml2d-menus .oml2d-menus-item {
+  color: #94a3b8;
+}
+
+.dark #oml2d-menus .oml2d-menus-item:hover {
+  color: #38bdf8;
+}
+
+.dark #oml2d-tips {
+  background-color: rgba(30, 41, 59, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 3px 15px 2px rgba(0, 0, 0, 0.4) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.dark #oml2d-tips span {
+  color: #38bdf8;
+}
+
+/* 画布跟舞台同尺寸时保持等比，避免 CSS 把位图拉变形 */
+#oml2d-canvas {
+  object-fit: contain;
 }
 
 /* Recharts 去掉点击黑框 + 交互样式 */
