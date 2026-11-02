@@ -106,7 +106,13 @@ type PixiAppLike = {
   renderer?: { plugins?: { extract?: { canvas: (target: unknown) => HTMLCanvasElement } } };
 };
 
+type StageApi = {
+  __waifuPosPatched?: boolean;
+  reloadStyle: (modelSize?: Record<string, unknown>) => void;
+};
+
 type Oml2dApi = {
+  stage?: StageApi;
   onLoad: (fn: (status: "loading" | "success" | "fail") => void) => void;
   onStageSlideIn: (fn: () => void) => void;
   stageSlideIn: () => Promise<void>;
@@ -296,9 +302,13 @@ function applySavedWaifuPosition(stage: HTMLElement): boolean {
   if (!saved) return false;
   try {
     const { left, top } = JSON.parse(saved) as { left: number; top: number };
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return false;
     stage.style.transition = "none";
     stage.style.animation = "none";
     stage.style.transform = "none";
+    // reloadStyle 会 Object.assign dock（right/bottom），仅写 left/top 会与旧值叠成双约束
+    stage.style.removeProperty("right");
+    stage.style.removeProperty("bottom");
     stage.style.left = `${left}px`;
     stage.style.top = `${top}px`;
     stage.style.right = "auto";
@@ -307,6 +317,11 @@ function applySavedWaifuPosition(stage: HTMLElement): boolean {
   } catch {
     return false;
   }
+}
+
+function syncSavedWaifuPosition(): void {
+  const stage = document.getElementById("oml2d-stage");
+  if (stage) applySavedWaifuPosition(stage);
 }
 
 /** 与旧 waifu-tips.js initDrag 对等的 #oml2d-stage 拖拽；菜单区域不触发拖。 */
@@ -400,14 +415,26 @@ function installStageDrag(oml2d: Oml2dApi): () => void {
 }
 
 function installWaifuPositionPersistence(oml2d: Oml2dApi): void {
-  const sync = () => {
-    const stage = document.getElementById("oml2d-stage");
-    if (stage) applySavedWaifuPosition(stage);
-  };
-  // 模型 reload / slideIn 会 resetStyle 覆盖 dock，有保存位置时在滑入后再贴回去
-  oml2d.onStageSlideIn(sync);
+  const stageApi = oml2d.stage;
+  if (stageApi && !stageApi.__waifuPosPatched) {
+    stageApi.__waifuPosPatched = true;
+    const origReloadStyle = stageApi.reloadStyle.bind(stageApi);
+    // loadModel 成功后在 .then 里调用 reloadStyle(dock)，会盖掉 onLoad 里过早的回写
+    stageApi.reloadStyle = (modelSize) => {
+      origReloadStyle(modelSize);
+      syncSavedWaifuPosition();
+    };
+  }
+
+  // slideIn 动画结束后再贴一次（清掉 animation transform 与 dock 残留）
+  oml2d.onStageSlideIn(() => {
+    requestAnimationFrame(() => syncSavedWaifuPosition());
+  });
   oml2d.onLoad((status) => {
-    if (status === "success") sync();
+    if (status === "success") {
+      // success 早于同轮 loadModel().then 中的 reloadStyle，留给 patch 处理；此处兜底异步链
+      setTimeout(() => syncSavedWaifuPosition(), 0);
+    }
   });
 }
 
