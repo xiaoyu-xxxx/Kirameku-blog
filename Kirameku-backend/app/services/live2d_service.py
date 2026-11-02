@@ -76,8 +76,20 @@ def _asset_url(*parts: str, bust: str | int | None = None) -> str:
     return url
 
 
-def _invalidate_preview_cache(*keys: str) -> None:
-    for key in keys:
+def _invalidate_preview_cache(*prefixes: str) -> None:
+    """Drop in-memory preview entries whose keys start with any prefix.
+
+    resolve_skin_preview keys are ``model:skin:rel:entry:family``. Callers pass
+    ``f"{model_id}:{skin_id}:"`` so entry/family/rel changes still clear.
+    """
+    if not prefixes:
+        return
+    doomed = [
+        key
+        for key in list(_preview_url_cache)
+        if any(key.startswith(prefix) for prefix in prefixes)
+    ]
+    for key in doomed:
         _preview_url_cache.pop(key, None)
 
 
@@ -261,7 +273,7 @@ def save_skin_preview_cache(
     session.add(row)
     session.commit()
     session.refresh(row)
-    _invalidate_preview_cache(f"{row.model_id}:{row.id}:{_safe_rel_key(row.rel_path)}")
+    _invalidate_preview_cache(f"{row.model_id}:{row.id}:")
     return serialize_skin(row)
 
 
@@ -275,7 +287,7 @@ def delete_skin_preview_cache(session: Session, skin_id: int) -> dict:
     session.add(row)
     session.commit()
     session.refresh(row)
-    _invalidate_preview_cache(f"{row.model_id}:{row.id}:{_safe_rel_key(row.rel_path)}")
+    _invalidate_preview_cache(f"{row.model_id}:{row.id}:")
     return serialize_skin(row)
 
 
