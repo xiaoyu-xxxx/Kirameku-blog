@@ -14,7 +14,7 @@ from app.schemas.live2d import (
     Live2DSkinUpdate,
 )
 from app.services import live2d_service
-from app.utils.live2d_package import discover_cubism2_packages, extract_live2d_zip
+from app.utils.live2d_package import discover_live2d_packages, extract_live2d_zip
 from app.utils.rate_limit import check_rate_limit
 from app.config import LIVE2D_UPLOAD_RATE_LIMIT, LIVE2D_UPLOAD_RATE_WINDOW
 
@@ -74,7 +74,7 @@ async def upload_skins(
     session: Session = Depends(get_session),
     user: dict = Depends(get_current_user),
 ):
-    """Append Cubism2 zip packages as new skins on an existing model (versioned paths)."""
+    """Append Cubism2/3/4 zip packages as new skins on an existing model (versioned paths)."""
     username = user.get("sub") or "admin"
     check_rate_limit(
         f"live2d-upload:{username}",
@@ -85,7 +85,7 @@ async def upload_skins(
         raise HTTPException(400, "仅支持 zip 格式")
     raw = await file.read()
     files = extract_live2d_zip(raw)
-    packages = discover_cubism2_packages(files)
+    packages = discover_live2d_packages(files)
     return live2d_service.append_skins_to_model(
         session,
         model_id=model_id,
@@ -102,7 +102,7 @@ async def upload_skin_preview_cache(
     session: Session = Depends(get_session),
     _: dict = Depends(get_current_user),
 ):
-    """Internal: store assembled Cubism2 snapshot under previews/<model_id>/<skin_id>.png."""
+    """Internal: store assembled Live2D snapshot under previews/<model_id>/<skin_id>.png."""
     raw = await file.read()
     content_type = file.content_type or ""
     # sniff if browser omitted content-type
@@ -184,7 +184,7 @@ async def upload_model(
         raise HTTPException(400, "仅支持 zip 格式")
     raw = await file.read()
     files = extract_live2d_zip(raw)
-    packages = discover_cubism2_packages(files)
+    packages = discover_live2d_packages(files)
     return live2d_service.register_upload(
         session,
         files=files,

@@ -4,6 +4,10 @@ export type Live2DSkinItem = {
   id: number;
   model_id: number;
   rel_path: string;
+  /** Entry filename relative to skin dir (index.json / *.model3.json) */
+  entry_json?: string;
+  /** cubism2 | cubism4 */
+  cubism_family?: string;
   label: string;
   sort: number;
   enabled: boolean;

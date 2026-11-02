@@ -23,13 +23,17 @@ class Live2DModel(SQLModel, table=True):
 
 
 class Live2DSkin(SQLModel, table=True):
-    """One Cubism2 package (skin/clothes) under a model group."""
+    """One Cubism2/3/4 package (skin/clothes) under a model group."""
 
     __tablename__ = "live2d_skin"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     model_id: int = Field(index=True, foreign_key="live2d_model.id")
     rel_path: str = Field(max_length=300, index=True)
+    # Entry filename relative to the skin directory (index.json / foo.model3.json).
+    entry_json: str = Field(default="index.json", max_length=200)
+    # cubism2 | cubism4 (Cubism3/4 share the Cubism4/5 runtime stack).
+    cubism_family: str = Field(default="cubism2", max_length=20)
     label: str = Field(default="", max_length=200)
     sort: int = Field(default=0)
     enabled: bool = Field(default=True)

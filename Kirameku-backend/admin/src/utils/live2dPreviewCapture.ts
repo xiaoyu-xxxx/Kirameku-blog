@@ -1,11 +1,17 @@
 /**
- * Cubism2 Live2D admin preview helpers.
+ * Live2D admin preview helpers (OhMyLive2D, aligned with frontend 0.19.x).
  * - LivePreviewController: single on-screen instance for the right panel
  * - captureAssembledPreview: offscreen one-shot (batch / fallback), concurrency 1
- * CDN pixi + cubism2 + /live2d/live2d.min.js (admin-only; not for public site).
+ * Cubism Core is bundled inside oh-my-live2d (Cubism2 + Cubism5); no separate
+ * cubism2-only pixi-live2d-display CDN path.
+ *
+ * Note: OML2D uses fixed DOM ids (oml2d-stage, …), so only one instance may exist
+ * per document. Offscreen capture pauses the live controller first.
  */
+import { loadOml2d } from "oh-my-live2d";
+
 export type CaptureOptions = {
-  /** Model index.json absolute or root-relative URL */
+  /** Absolute or root-relative model entry JSON URL (index.json / *.model3.json) */
   modelJsonUrl: string;
   width?: number;
   height?: number;
@@ -13,78 +19,56 @@ export type CaptureOptions = {
   signal?: AbortSignal;
 };
 
-type ScriptWindow = Window &
-  typeof globalThis & {
-    PIXI?: any;
-    Live2D?: any;
-  };
-
-let scriptsPromise: Promise<void> | null = null;
-let chain: Promise<unknown> = Promise.resolve();
-
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      `script[data-l2d-preview="${src}"]`
-    );
-    if (existing) {
-      if (existing.dataset.loaded === "1") {
-        resolve();
-        return;
-      }
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener(
-        "error",
-        () => reject(new Error(`Failed to load ${src}`)),
-        { once: true }
-      );
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = src;
-    s.async = true;
-    s.dataset.l2dPreview = src;
-    s.onload = () => {
-      s.dataset.loaded = "1";
-      resolve();
+type PixiAppLike = {
+  renderer?: {
+    plugins?: {
+      extract?: {
+        canvas?: (stage: unknown) => HTMLCanvasElement;
+      };
     };
-    s.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.head.appendChild(s);
-  });
+  };
+  stage?: unknown;
+  destroy?: (removeView?: boolean) => void;
+  ticker?: { addOnce?: (fn: () => void) => void };
+};
+
+type Oml2dInstance = {
+  pixiApp?: { app?: PixiAppLike };
+  onLoad: (fn: (status: "loading" | "success" | "fail") => void | Promise<void>) => void;
+  stageSlideIn?: () => Promise<void>;
+  clearTips?: () => void;
+  stopTipsIdle?: () => void;
+};
+
+const OML2D_ELEMENT_IDS = [
+  "oml2d-stage",
+  "oml2d-canvas",
+  "oml2d-statusBar",
+  "oml2d-tips",
+  "oml2d-menus",
+  "oml2d-global-style"
+];
+
+let chain: Promise<unknown> = Promise.resolve();
+let livePauseHandler: (() => Promise<() => Promise<void>>) | null = null;
+
+export function registerLivePreviewPauseHandler(
+  handler: (() => Promise<() => Promise<void>>) | null
+) {
+  livePauseHandler = handler;
 }
 
-async function ensureCaptureRuntime(): Promise<any> {
-  if (!scriptsPromise) {
-    scriptsPromise = (async () => {
-      const w = window as ScriptWindow;
-      if (!w.Live2D) {
-        await loadScript("/live2d/live2d.min.js");
-      }
-      if (!w.PIXI) {
-        await loadScript(
-          "https://cdn.jsdelivr.net/npm/pixi.js@6.5.10/dist/browser/pixi.min.js"
-        );
-      }
-      if (!w.PIXI?.live2d?.Live2DModel) {
-        await loadScript(
-          "https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism2.min.js"
-        );
-      }
-      if (!w.PIXI?.live2d?.Live2DModel) {
-        throw new Error("pixi-live2d-display Cubism2 runtime unavailable");
-      }
-      try {
-        w.PIXI.live2d.Live2DModel.registerTicker?.(w.PIXI.Ticker);
-      } catch {
-        /* ignore */
-      }
-    })().catch(err => {
-      scriptsPromise = null;
-      throw err;
-    });
+function cleanupOml2dDom(root?: ParentNode | null) {
+  for (const id of OML2D_ELEMENT_IDS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (root && !root.contains(el) && el.id !== "oml2d-global-style") continue;
+    try {
+      el.remove();
+    } catch {
+      /* ignore */
+    }
   }
-  await scriptsPromise;
-  return (window as ScriptWindow).PIXI;
 }
 
 function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -102,29 +86,6 @@ function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-async function waitFrames(
-  app: any,
-  frames: number,
-  signal?: AbortSignal
-): Promise<void> {
-  for (let i = 0; i < frames; i++) {
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    await new Promise<void>(resolve => {
-      app.ticker.addOnce(() => resolve());
-    });
-  }
-}
-
-function fitModel(model: any, width: number, height: number) {
-  const mw = model.width || model.internalModel?.width || 512;
-  const mh = model.height || model.internalModel?.height || 512;
-  const scale = Math.min(width / mw, height / mh) * 0.92;
-  model.scale?.set?.(scale);
-  if (model.anchor?.set) model.anchor.set(0.5, 0.5);
-  model.x = width / 2;
-  model.y = height / 2;
-}
-
 function canvasToPngBlob(view: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     try {
@@ -138,88 +99,165 @@ function canvasToPngBlob(view: HTMLCanvasElement): Promise<Blob> {
   });
 }
 
+async function extractPngBlob(instance: Oml2dInstance): Promise<Blob> {
+  const app = instance.pixiApp?.app;
+  const extract = app?.renderer?.plugins?.extract;
+  const canvas = extract?.canvas?.(app?.stage);
+  if (!canvas) {
+    throw new Error("OML2D extract unavailable");
+  }
+  const blob = await canvasToPngBlob(canvas);
+  if (blob.size < 64) {
+    throw new Error("Captured preview looks empty");
+  }
+  return blob;
+}
+
+function destroyOml2d(instance: Oml2dInstance | null, host?: HTMLElement | null) {
+  if (!instance) {
+    cleanupOml2dDom(host);
+    return;
+  }
+  try {
+    instance.stopTipsIdle?.();
+    instance.clearTips?.();
+  } catch {
+    /* ignore */
+  }
+  try {
+    instance.pixiApp?.app?.destroy?.(true);
+  } catch {
+    /* ignore */
+  }
+  cleanupOml2dDom(host);
+  if (host) {
+    while (host.firstChild) host.removeChild(host.firstChild);
+  }
+}
+
+function waitOml2dLoad(
+  instance: Oml2dInstance,
+  timeoutMs: number,
+  signal?: AbortSignal
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      if (err) reject(err);
+      else resolve();
+    };
+    const onAbort = () => finish(new DOMException("Aborted", "AbortError"));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const timer = window.setTimeout(() => {
+      finish(new Error("Live2D preview timed out"));
+    }, timeoutMs);
+    instance.onLoad(status => {
+      if (status === "success") finish();
+      else if (status === "fail") finish(new Error("Live2D model load failed"));
+    });
+  });
+}
+
+async function createOml2d(
+  parent: HTMLElement,
+  modelJsonUrl: string,
+  width: number,
+  height: number,
+  signal?: AbortSignal,
+  timeoutMs = 15000
+): Promise<Oml2dInstance> {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  cleanupOml2dDom();
+  while (parent.firstChild) parent.removeChild(parent.firstChild);
+
+  const instance = loadOml2d({
+    parentElement: parent,
+    sayHello: false,
+    mobileDisplay: false,
+    transitionTime: 0,
+    initialStatus: "active",
+    menus: { disable: true },
+    statusBar: { disable: true },
+    tips: {
+      messageLine: 1,
+      idleTips: { message: [], interval: 600000, duration: 0 },
+      welcomeTips: { message: {}, duration: 0 },
+      copyTips: { message: [], duration: 0 }
+    } as any,
+    models: [
+      {
+        name: "admin-preview",
+        path: modelJsonUrl,
+        scale: 0.18,
+        position: [0, 40],
+        stageStyle: {
+          width: `${width}px`,
+          height: `${height}px`,
+          position: "relative",
+          left: "0",
+          bottom: "0",
+          margin: "0 auto",
+          background: "transparent",
+          pointerEvents: "none"
+        }
+      }
+    ]
+  }) as unknown as Oml2dInstance;
+
+  await waitOml2dLoad(instance, timeoutMs, signal);
+  try {
+    await instance.stageSlideIn?.();
+  } catch {
+    /* ignore slide animation */
+  }
+  await abortableDelay(120, signal);
+  return instance;
+}
+
 async function captureOnce(options: CaptureOptions): Promise<Blob> {
   const width = options.width ?? 512;
   const height = options.height ?? 512;
   const timeoutMs = options.timeoutMs ?? 12000;
   const signal = options.signal;
-
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-  const PIXI = await ensureCaptureRuntime();
-  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  const resume = livePauseHandler ? await livePauseHandler() : async () => undefined;
 
-  const app = new PIXI.Application({
-    width,
-    height,
-    backgroundAlpha: 0,
-    antialias: true,
-    preserveDrawingBuffer: true,
-    autoStart: true
-  });
+  const host = document.createElement("div");
+  host.style.cssText =
+    "position:fixed;left:-10000px;top:0;width:" +
+    width +
+    "px;height:" +
+    height +
+    "px;opacity:0;pointer-events:none;overflow:hidden;";
+  document.body.appendChild(host);
 
-  const view = app.view as HTMLCanvasElement;
-  view.style.cssText =
-    "position:fixed;left:-10000px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;";
-  document.body.appendChild(view);
-
-  let model: any = null;
-  const timeout = window.setTimeout(() => {
-    try {
-      signal?.throwIfAborted?.();
-    } catch {
-      /* handled below via race */
-    }
-  }, timeoutMs);
-
+  let instance: Oml2dInstance | null = null;
   try {
-    const loadPromise = PIXI.live2d.Live2DModel.from(options.modelJsonUrl, {
-      autoInteract: false,
-      idleMotionGroup: "idle"
-    });
-
-    const raced = await Promise.race([
-      loadPromise,
-      abortableDelay(timeoutMs, signal).then(() => {
-        throw new Error("Live2D preview capture timed out");
-      })
-    ]);
-    model = raced;
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-
-    fitModel(model, width, height);
-    app.stage.addChild(model);
-
-    await waitFrames(app, 4, signal);
-    await abortableDelay(80, signal);
-
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-
-    const blob = await canvasToPngBlob(view);
-    if (blob.size < 64) {
-      throw new Error("Captured preview looks empty");
-    }
-    return blob;
+    instance = await createOml2d(
+      host,
+      options.modelJsonUrl,
+      width,
+      height,
+      signal,
+      timeoutMs
+    );
+    return await extractPngBlob(instance);
   } finally {
-    window.clearTimeout(timeout);
+    destroyOml2d(instance, host);
     try {
-      model?.destroy?.({ children: true, texture: true, baseTexture: true });
+      host.remove();
     } catch {
       /* ignore */
     }
     try {
-      app.destroy(true, { children: true, texture: true, baseTexture: true });
+      await resume();
     } catch {
-      try {
-        app.destroy(true);
-      } catch {
-        /* ignore */
-      }
-    }
-    try {
-      view.remove();
-    } catch {
-      /* ignore */
+      /* ignore resume errors */
     }
   }
 }
@@ -236,10 +274,19 @@ export function captureAssembledPreview(options: CaptureOptions): Promise<Blob> 
   return run;
 }
 
-export function skinModelJsonUrl(relPath: string, assetBase = "/live2d/"): string {
+export function skinModelJsonUrl(
+  relPath: string,
+  entryJson = "index.json",
+  assetBase = "/live2d/"
+): string {
   const base = assetBase.endsWith("/") ? assetBase : `${assetBase}/`;
-  const rel = (relPath || "").replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
-  return `${base}model/${rel}/index.json`;
+  const rel = (relPath || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+  const entry = (entryJson || "index.json").replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!rel) return `${base}model/${entry}`;
+  return `${base}model/${rel}/${entry}`;
 }
 
 export type LivePreviewLoadOptions = {
@@ -249,19 +296,33 @@ export type LivePreviewLoadOptions = {
 };
 
 /**
- * Single on-screen Cubism2 instance for the admin right panel.
- * Destroy/rebuild model on skin change; snapshot via the same canvas.
+ * Single on-screen OhMyLive2D instance for the admin right panel.
+ * Destroy/rebuild on skin change; snapshot via pixi extract (same as frontend capturePhoto).
  */
 export class LivePreviewController {
   private container: HTMLElement | null = null;
-  private app: any = null;
-  private model: any = null;
+  private hostEl: HTMLElement | null = null;
+  private instance: Oml2dInstance | null = null;
   private loadSeq = 0;
   private resizeObserver: ResizeObserver | null = null;
   private currentUrl = "";
+  private resumeAfterPause: (() => Promise<void>) | null = null;
+
+  constructor() {
+    registerLivePreviewPauseHandler(async () => {
+      const url = this.currentUrl;
+      const shouldResume = Boolean(url && this.container);
+      this.teardownInstance();
+      return async () => {
+        if (shouldResume && this.container && url) {
+          await this.load({ modelJsonUrl: url, timeoutMs: 15000 });
+        }
+      };
+    });
+  }
 
   get ready(): boolean {
-    return Boolean(this.app && this.model && this.currentUrl);
+    return Boolean(this.instance && this.currentUrl);
   }
 
   get modelJsonUrl(): string {
@@ -269,168 +330,74 @@ export class LivePreviewController {
   }
 
   mount(container: HTMLElement) {
-    if (this.container === container && this.app) return;
-    this.destroyAppOnly();
+    if (this.container === container && this.hostEl) return;
+    this.destroy();
     this.container = container;
     while (container.firstChild) container.removeChild(container.firstChild);
-
-    const width = Math.max(160, container.clientWidth || 512);
-    const height = Math.max(160, container.clientHeight || 380);
-
-    // Application is created lazily in load() after runtime scripts are ready,
-    // so mount only stores the host and size observer.
+    const host = document.createElement("div");
+    host.style.cssText =
+      "width:100%;height:100%;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;";
+    container.appendChild(host);
+    this.hostEl = host;
     this.resizeObserver?.disconnect();
     this.resizeObserver = new ResizeObserver(() => {
-      void this.resizeToContainer();
+      /* OML2D stage size is set at load; remount on next load if needed */
     });
     this.resizeObserver.observe(container);
-    void width;
-    void height;
   }
 
-  private async ensureApp(): Promise<any> {
-    if (!this.container) throw new Error("Live preview host not mounted");
-    const PIXI = await ensureCaptureRuntime();
-    if (this.app) return PIXI;
-
-    const width = Math.max(160, this.container.clientWidth || 512);
-    const height = Math.max(160, this.container.clientHeight || 380);
-    const app = new PIXI.Application({
-      width,
-      height,
-      backgroundAlpha: 0,
-      antialias: true,
-      preserveDrawingBuffer: true,
-      autoStart: true,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
-      autoDensity: true
-    });
-    const view = app.view as HTMLCanvasElement;
-    view.style.cssText = "display:block;max-width:100%;max-height:100%;margin:0 auto;";
-    this.container.appendChild(view);
-    this.app = app;
-    return PIXI;
-  }
-
-  private async resizeToContainer() {
-    if (!this.app || !this.container) return;
-    const width = Math.max(160, this.container.clientWidth || 512);
-    const height = Math.max(160, this.container.clientHeight || 380);
-    try {
-      this.app.renderer.resize(width, height);
-    } catch {
-      /* ignore */
-    }
-    if (this.model) {
-      fitModel(this.model, width, height);
-    }
-  }
-
-  private destroyModelOnly() {
-    if (!this.model) return;
-    try {
-      this.app?.stage?.removeChild?.(this.model);
-    } catch {
-      /* ignore */
-    }
-    try {
-      this.model.destroy?.({ children: true, texture: true, baseTexture: true });
-    } catch {
-      /* ignore */
-    }
-    this.model = null;
+  private teardownInstance() {
+    destroyOml2d(this.instance, this.hostEl);
+    this.instance = null;
     this.currentUrl = "";
-  }
-
-  private destroyAppOnly() {
-    this.destroyModelOnly();
-    if (this.app) {
-      const view = this.app.view as HTMLCanvasElement | undefined;
-      try {
-        this.app.destroy(true, { children: true, texture: true, baseTexture: true });
-      } catch {
-        try {
-          this.app.destroy(true);
-        } catch {
-          /* ignore */
-        }
-      }
-      try {
-        view?.remove?.();
-      } catch {
-        /* ignore */
-      }
-      this.app = null;
-    }
   }
 
   async load(options: LivePreviewLoadOptions): Promise<void> {
     const timeoutMs = options.timeoutMs ?? 15000;
     const signal = options.signal;
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    if (!this.container) throw new Error("Live preview host not mounted");
+    if (!this.container || !this.hostEl) throw new Error("Live preview host not mounted");
 
     const seq = ++this.loadSeq;
-    this.destroyModelOnly();
+    this.teardownInstance();
 
-    const PIXI = await this.ensureApp();
-    if (seq !== this.loadSeq) throw new DOMException("Aborted", "AbortError");
-    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    const width = Math.max(160, this.container.clientWidth || 512);
+    const height = Math.max(160, this.container.clientHeight || 380);
 
-    await this.resizeToContainer();
-
-    const loadPromise = PIXI.live2d.Live2DModel.from(options.modelJsonUrl, {
-      autoInteract: false,
-      idleMotionGroup: "idle"
-    });
-
-    const model = await Promise.race([
-      loadPromise,
-      abortableDelay(timeoutMs, signal).then(() => {
-        throw new Error("Live2D live preview timed out");
-      })
-    ]);
+    const instance = await createOml2d(
+      this.hostEl,
+      options.modelJsonUrl,
+      width,
+      height,
+      signal,
+      timeoutMs
+    );
 
     if (seq !== this.loadSeq || signal?.aborted) {
-      try {
-        model?.destroy?.({ children: true, texture: true, baseTexture: true });
-      } catch {
-        /* ignore */
-      }
+      destroyOml2d(instance, this.hostEl);
       throw new DOMException("Aborted", "AbortError");
     }
 
-    const width = this.app.screen.width;
-    const height = this.app.screen.height;
-    fitModel(model, width, height);
-    this.app.stage.addChild(model);
-    this.model = model;
+    this.instance = instance;
     this.currentUrl = options.modelJsonUrl;
-
-    await waitFrames(this.app, 3, signal);
-    if (seq !== this.loadSeq) throw new DOMException("Aborted", "AbortError");
   }
 
   async snapshot(signal?: AbortSignal): Promise<Blob> {
-    if (!this.app || !this.model) {
+    if (!this.instance) {
       throw new Error("Live preview is not ready");
     }
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    await waitFrames(this.app, 2, signal);
-    const view = this.app.view as HTMLCanvasElement;
-    const blob = await canvasToPngBlob(view);
-    if (blob.size < 64) {
-      throw new Error("Live snapshot looks empty");
-    }
-    return blob;
+    await abortableDelay(50, signal);
+    return extractPngBlob(this.instance);
   }
 
-  /** Abort in-flight load and tear down WebGL. */
+  /** Abort in-flight load and tear down WebGL / OML2D DOM. */
   destroy() {
     this.loadSeq += 1;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
-    this.destroyAppOnly();
+    this.teardownInstance();
+    this.hostEl = null;
     this.container = null;
   }
 }

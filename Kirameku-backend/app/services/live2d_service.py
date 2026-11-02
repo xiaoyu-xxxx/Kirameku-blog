@@ -106,36 +106,98 @@ def _resolve_bundle_preview(rel_key: str) -> str | None:
     return None
 
 
-def _resolve_atlas_preview(rel_key: str) -> str | None:
-    """A: textures[0] from index.json."""
+def _skin_entry_json(skin: Live2DSkin | None = None, *, entry_json: str | None = None) -> str:
+    raw = entry_json if entry_json is not None else (getattr(skin, "entry_json", None) if skin else None)
+    val = (raw or "index.json").replace("\\", "/").strip().lstrip("/")
+    if not val or ".." in val.split("/"):
+        return "index.json"
+    return val
+
+def _skin_cubism_family(skin: Live2DSkin | None = None, *, cubism_family: str | None = None) -> str:
+    raw = cubism_family if cubism_family is not None else (getattr(skin, "cubism_family", None) if skin else None)
+    val = (raw or "cubism2").strip().lower()
+    return val if val in {"cubism2", "cubism4"} else "cubism2"
+
+def skin_catalog_path(skin: Live2DSkin) -> str:
+    """Option A: loadable relative path including entry file (under model/)."""
+    rel = _safe_rel_key(skin.rel_path)
+    entry = _skin_entry_json(skin)
+    return f"{rel}/{entry}" if rel else entry
+
+def detect_entry_on_disk(rel_path: str) -> tuple[str, str]:
+    """Probe LIVE2D_LOCAL_ROOT/model/<rel> for Cubism2/4 entry. Defaults to cubism2/index.json."""
+    rel_key = _safe_rel_key(rel_path)
+    root = LIVE2D_LOCAL_ROOT / "model" / rel_key
+    if not root.is_dir():
+        return "index.json", "cubism2"
+    index = root / "index.json"
+    if index.is_file():
+        return "index.json", "cubism2"
+    model_jsons = sorted(p for p in root.glob("*.model.json") if p.is_file())
+    if model_jsons:
+        return model_jsons[0].name, "cubism2"
+    model3 = sorted(p for p in root.glob("*.model3.json") if p.is_file())
+    if model3:
+        return model3[0].name, "cubism4"
+    return "index.json", "cubism2"
+
+def _resolve_atlas_preview(
+    rel_key: str,
+    *,
+    entry_json: str = "index.json",
+    cubism_family: str = "cubism2",
+) -> str | None:
+    """Atlas fallback: Cubism2 textures[0]; Cubism4 FileReferences.Textures[0].File."""
     try:
-        index_path = LIVE2D_LOCAL_ROOT / "model" / rel_key / "index.json"
-        if not index_path.is_file():
+        entry = _skin_entry_json(entry_json=entry_json)
+        family = _skin_cubism_family(cubism_family=cubism_family)
+        entry_path = LIVE2D_LOCAL_ROOT / "model" / rel_key / entry
+        if not entry_path.is_file():
             return None
-        data = json.loads(index_path.read_text(encoding="utf-8"))
-        textures = data.get("textures") if isinstance(data, dict) else None
-        if isinstance(textures, list) and textures:
-            tex = str(textures[0]).replace("\\", "/").lstrip("/")
-            if tex and ".." not in tex.split("/"):
-                return _asset_url("model", rel_key, tex)
+        data = json.loads(entry_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        tex: str | None = None
+        if family == "cubism4" or entry_path.name.lower().endswith(".model3.json"):
+            refs = data.get("FileReferences")
+            textures = refs.get("Textures") if isinstance(refs, dict) else None
+            if isinstance(textures, list) and textures:
+                first = textures[0]
+                if isinstance(first, str):
+                    tex = first
+                elif isinstance(first, dict) and isinstance(first.get("File"), str):
+                    tex = first["File"]
+        else:
+            textures = data.get("textures")
+            if isinstance(textures, list) and textures:
+                tex = str(textures[0])
+        if not tex:
+            return None
+        tex_n = str(tex).replace("\\", "/").lstrip("/")
+        if not tex_n or ".." in tex_n.split("/"):
+            return None
+        return _asset_url("model", rel_key, tex_n)
     except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
         return None
     return None
-
 
 def resolve_skin_preview(
     *,
     model_id: int | None,
     skin_id: int | None,
     rel_path: str,
+    entry_json: str = "index.json",
+    cubism_family: str = "cubism2",
 ) -> tuple[str | None, str | None]:
-    """Admin preview_url priority: assembled cache -> bundle -> textures[0] -> None.
+    """Admin preview_url priority: assembled cache -> bundle -> atlas -> None.
 
     Returns (url, kind) where kind is assembled|bundle|atlas|None.
     Public catalog is unchanged (does not call this).
     """
     rel_key = _safe_rel_key(rel_path)
-    cache_key = f"{model_id}:{skin_id}:{rel_key}"
+    entry = _skin_entry_json(entry_json=entry_json)
+    family = _skin_cubism_family(cubism_family=cubism_family)
+    cache_key = f"{model_id}:{skin_id}:{rel_key}:{entry}:{family}"
     if cache_key in _preview_url_cache:
         return _preview_url_cache[cache_key]
 
@@ -159,13 +221,12 @@ def resolve_skin_preview(
             url, kind = bundle, "bundle"
 
     if url is None and rel_key:
-        atlas = _resolve_atlas_preview(rel_key)
+        atlas = _resolve_atlas_preview(rel_key, entry_json=entry, cubism_family=family)
         if atlas:
             url, kind = atlas, "atlas"
 
     _preview_url_cache[cache_key] = (url, kind)
     return url, kind
-
 
 def resolve_skin_preview_url(rel_path: str) -> str | None:
     """Backward-compatible helper without assembled cache (no ids)."""
@@ -257,6 +318,8 @@ def serialize_model(session: Session, row: Live2DModel) -> dict:
             model_id=row.id,
             skin_id=preferred.id,
             rel_path=preferred.rel_path,
+            entry_json=_skin_entry_json(preferred),
+            cubism_family=_skin_cubism_family(preferred),
         )
     return {
         "id": row.id,
@@ -277,15 +340,21 @@ def serialize_model(session: Session, row: Live2DModel) -> dict:
 
 
 def serialize_skin(row: Live2DSkin) -> dict:
+    entry = _skin_entry_json(row)
+    family = _skin_cubism_family(row)
     preview_url, preview_kind = resolve_skin_preview(
         model_id=row.model_id,
         skin_id=row.id,
         rel_path=row.rel_path,
+        entry_json=entry,
+        cubism_family=family,
     )
     return {
         "id": row.id,
         "model_id": row.model_id,
         "rel_path": row.rel_path,
+        "entry_json": entry,
+        "cubism_family": family,
         "label": row.label,
         "sort": row.sort,
         "enabled": row.enabled,
@@ -551,7 +620,7 @@ def build_catalog(session: Session) -> dict:
     models: list[list[str]] = []
     messages: list[str] = []
     for m, skins in rows:
-        models.append([s.rel_path for s in skins])
+        models.append([skin_catalog_path(s) for s in skins])
         messages.append(m.name)
     model_index, clothes_index, _, _ = resolve_default_indexes(session)
     if models:
@@ -635,10 +704,23 @@ def import_from_model_list(
         first_skin_id = None
         for j, rel in enumerate(paths):
             rel_path = str(rel).replace("\\", "/").strip("/")
+            # model_list may already include entry (Option A) or legacy dir-only paths.
+            if rel_path.lower().endswith(".json"):
+                parts = rel_path.rsplit("/", 1)
+                if len(parts) == 2:
+                    rel_path, entry_name = parts[0], parts[1]
+                else:
+                    entry_name = parts[0]
+                    rel_path = ""
+                family = "cubism4" if entry_name.lower().endswith(".model3.json") else "cubism2"
+            else:
+                entry_name, family = detect_entry_on_disk(rel_path)
             label = rel_path.split("/")[-1] if rel_path else f"skin-{j}"
             skin = Live2DSkin(
                 model_id=model.id,
                 rel_path=rel_path,
+                entry_json=entry_name,
+                cubism_family=family,
                 label=label,
                 sort=j,
                 enabled=True,
@@ -743,6 +825,8 @@ def register_upload(
         skin = Live2DSkin(
             model_id=model.id,
             rel_path=rel_path,
+            entry_json=pkg.get("entry_json") or "index.json",
+            cubism_family=pkg.get("cubism_family") or "cubism2",
             label=label,
             sort=j,
             enabled=True,
@@ -768,7 +852,7 @@ def append_skins_to_model(
     packages: list[dict],
     set_as_default: bool = False,
 ) -> dict:
-    """Append Cubism2 packages as new skins under an existing model.
+    """Append Cubism2/3/4 packages as new skins under an existing model.
 
     Always writes model/<slug>/<version>/... so builtin/immutable URLs are never overwritten.
     """
@@ -815,6 +899,8 @@ def append_skins_to_model(
         skin = Live2DSkin(
             model_id=model.id,
             rel_path=rel_path,
+            entry_json=pkg.get("entry_json") or "index.json",
+            cubism_family=pkg.get("cubism_family") or "cubism2",
             label=label,
             sort=next_sort + j,
             enabled=True,
