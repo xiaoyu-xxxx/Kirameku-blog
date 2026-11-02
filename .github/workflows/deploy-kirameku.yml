@@ -117,8 +117,10 @@ jobs:
             .next \
             "$REMOTE_ROOT"
           # Sync public as a directory; --delete scoped to public/ only
+          # Preserve server-side live2d capture cache (not in CI public tree)
           rsync -avzr --delete \
             -e "$RSYNC_RSH" \
+            --exclude 'live2d/previews/' \
             public \
             "$REMOTE_ROOT"
           # Root package files without --delete (must not wipe node_modules or other server-side root files)
