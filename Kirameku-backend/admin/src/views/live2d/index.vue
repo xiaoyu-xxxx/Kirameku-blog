@@ -817,6 +817,13 @@ onMounted(() => onSearch());
   --l2d-soft: var(--el-color-primary-light-9, #ecf5ff);
   --l2d-left: 340px;
   --l2d-preview-h: 380px;
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 140px);
+  max-height: calc(100dvh - 140px);
+  min-height: 480px;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .top-bar {
   background: var(--el-bg-color);
@@ -856,7 +863,10 @@ onMounted(() => onSearch());
   display: grid;
   grid-template-columns: var(--l2d-left) 1fr;
   gap: 12px;
-  min-height: 640px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  align-items: stretch;
 }
 .pane {
   background: var(--el-bg-color);
@@ -866,6 +876,12 @@ onMounted(() => onSearch());
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
+}
+.left-pane,
+.main-pane {
+  min-height: 0;
+  height: 100%;
 }
 .pane-hd {
   padding: 10px 12px;
@@ -909,8 +925,10 @@ onMounted(() => onSearch());
   list-style: none;
   margin: 0;
   padding: 0 0 8px;
-  overflow: auto;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .model-item {
   display: grid;
