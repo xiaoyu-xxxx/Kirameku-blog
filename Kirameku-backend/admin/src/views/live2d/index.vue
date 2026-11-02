@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, onMounted } from "vue";
 import { message } from "@/utils/message";
 import {
   getLive2DModels,
@@ -256,12 +256,6 @@ async function submitDefaults() {
   }
 }
 
-const defaultSummary = computed(() => {
-  if (!defaults.value) return "未加载";
-  const m = dataList.value.find(x => x.id === defaults.value?.default_model_id);
-  return `模型 #${defaults.value.default_model_id ?? "-"}（catalog index ${defaults.value.default_model_index}） / 皮肤 #${defaults.value.default_skin_id ?? "-"}（index ${defaults.value.default_clothes_index}）${m ? " · " + m.name : ""}`;
-});
-
 onMounted(onSearch);
 </script>
 
@@ -272,11 +266,6 @@ onMounted(onSearch);
         <div class="flex justify-between items-center flex-wrap gap-2">
           <div>
             <span class="font-medium">看板娘管理</span>
-            <p class="text-xs text-gray-500 mt-1 font-normal">
-              列表 / 皮肤 / 站点默认 / zip 上传。资源写入 LIVE2D_LOCAL_ROOT（勿用 demos/ 或图片上传 API）。
-              新包路径版本化，避免覆盖 CDN immutable 的 /live2d/ URL。
-            </p>
-            <p class="text-xs text-gray-500 mt-1">站点默认：{{ defaultSummary }}</p>
           </div>
           <div class="flex flex-wrap gap-2">
             <el-button :icon="useRenderIcon('ri:download-cloud-line')" @click="handleImport(false)">
