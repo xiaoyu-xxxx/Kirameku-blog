@@ -803,7 +803,18 @@ export default function Live2D() {
       const assetBase = normalizeAssetBase(catalog?.asset_base);
       const models: Oml2dModel[] = list.models.map((paths, i) => ({
         name: list.messages?.[i] ?? `model-${i}`,
-        path: paths.map((p) => `${assetBase}model/${p}/index.json`),
+        // Catalog Option A: each path already includes the entry file.
+        // Legacy model_list.json fallback may still be dir-only → append index.json.
+        path: paths.map((p) => {
+          const rel = String(p || "")
+            .replace(/\\/g, "/")
+            .replace(/^\/+/, "")
+            .replace(/\/+$/, "");
+          if (/\.json$/i.test(rel)) {
+            return `${assetBase}model/${rel}`;
+          }
+          return `${assetBase}model/${rel}/index.json`;
+        }),
       }));
 
       const { modelIndex, clothesIndex } = resolveInitialIndexes(models, {

@@ -8,6 +8,8 @@ class Live2DSkinOut(BaseModel):
     id: int
     model_id: int
     rel_path: str
+    entry_json: str = "index.json"
+    cubism_family: str = "cubism2"
     label: str
     sort: int
     enabled: bool
@@ -64,6 +66,8 @@ class Live2DDefaultsUpdate(BaseModel):
 
 
 class Live2DCatalogOut(BaseModel):
+    # Option A: each string is a loadable relative path including the entry file
+    # (e.g. "za/.../index.json" or ".../foo.model3.json"). Frontend must NOT append /index.json.
     models: list[list[str]]
     messages: list[str]
     default_model_index: int

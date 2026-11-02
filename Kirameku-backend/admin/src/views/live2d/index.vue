@@ -525,7 +525,7 @@ async function loadLiveForSkin(skin: Live2DSkinItem | null) {
   liveLoading.value = true;
   try {
     await liveController.load({
-      modelJsonUrl: skinModelJsonUrl(skin.rel_path),
+      modelJsonUrl: skinModelJsonUrl(skin.rel_path, skin.entry_json || "index.json"),
       timeoutMs: 15000,
       signal: ac.signal
     });
@@ -619,7 +619,7 @@ async function generatePreviewForSkin(
         blob = await snapshotCurrentLive(ac.signal);
       } else {
         blob = await captureAssembledPreview({
-          modelJsonUrl: skinModelJsonUrl(skin.rel_path),
+          modelJsonUrl: skinModelJsonUrl(skin.rel_path, skin.entry_json || "index.json"),
           width: 512,
           height: 512,
           timeoutMs: 12000,
@@ -628,7 +628,7 @@ async function generatePreviewForSkin(
       }
     } else {
       blob = await captureAssembledPreview({
-        modelJsonUrl: skinModelJsonUrl(skin.rel_path),
+        modelJsonUrl: skinModelJsonUrl(skin.rel_path, skin.entry_json || "index.json"),
         width: 512,
         height: 512,
         timeoutMs: 12000,
