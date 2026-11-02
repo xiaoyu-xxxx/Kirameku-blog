@@ -12,6 +12,7 @@ class Live2DSkinOut(BaseModel):
     sort: int
     enabled: bool
     preview_url: Optional[str] = None
+    preview_kind: Optional[str] = None  # assembled|bundle|atlas
     created_at: datetime
     updated_at: datetime
 
@@ -28,6 +29,7 @@ class Live2DModelOut(BaseModel):
     source: str
     skin_count: int = 0
     preview_url: Optional[str] = None
+    preview_kind: Optional[str] = None  # assembled|bundle|atlas
     created_at: datetime
     updated_at: datetime
 

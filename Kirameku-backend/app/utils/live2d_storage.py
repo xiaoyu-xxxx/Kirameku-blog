@@ -1,4 +1,4 @@
-"""Local disk storage for Live2D packages (never DEMO_* / demos/ R2)."""
+﻿"""Local disk storage for Live2D packages (never DEMO_* / demos/ R2)."""
 
 from __future__ import annotations
 
@@ -80,3 +80,35 @@ def versions_from_skin_rel_paths(slug: str, rel_paths: list[str]) -> list[str]:
             seen.add(ver)
             found.append(ver)
     return found
+
+
+def preview_cache_path(model_id: int, skin_id: int) -> Path:
+    """Assembled preview cache: LIVE2D_LOCAL_ROOT/previews/<model_id>/<skin_id>.png."""
+    return LIVE2D_LOCAL_ROOT / "previews" / str(int(model_id)) / f"{int(skin_id)}.png"
+
+
+def delete_model_preview_dir(model_id: int) -> None:
+    root = LIVE2D_LOCAL_ROOT / "previews" / str(int(model_id))
+    if root.exists() and root.is_dir():
+        shutil.rmtree(root, ignore_errors=True)
+    previews_root = LIVE2D_LOCAL_ROOT / "previews"
+    if previews_root.exists() and previews_root.is_dir() and not any(previews_root.iterdir()):
+        try:
+            previews_root.rmdir()
+        except OSError:
+            pass
+
+
+def delete_skin_preview_file(model_id: int, skin_id: int) -> None:
+    path = preview_cache_path(model_id, skin_id)
+    if path.is_file():
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    parent = path.parent
+    if parent.exists() and parent.is_dir() and not any(parent.iterdir()):
+        try:
+            parent.rmdir()
+        except OSError:
+            pass

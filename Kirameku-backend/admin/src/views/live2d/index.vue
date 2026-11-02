@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { ElMessageBox } from "element-plus";
 import { message } from "@/utils/message";
 import {
@@ -13,11 +13,17 @@ import {
   importLive2DModels,
   uploadLive2DZip,
   uploadLive2DSkins,
+  uploadSkinPreviewCache,
   type Live2DModelItem,
   type Live2DModelDetail,
   type Live2DDefaults,
   type Live2DSkinItem
 } from "@/api/live2d";
+import {
+  captureAssembledPreview,
+  skinModelJsonUrl,
+  LivePreviewController
+} from "@/utils/live2dPreviewCapture";
 import { useRenderIcon } from "@/components/ReIcon/src/hooks";
 
 defineOptions({ name: "Live2DAdminIndex" });
@@ -35,6 +41,18 @@ const filterMode = ref<FilterMode>("all");
 const selectedModelId = ref<number | null>(null);
 const selectedSkinId = ref<number | null>(null);
 const previewBroken = ref(false);
+const previewGenerating = ref(false);
+const previewGenLabel = ref("");
+const batchGenerating = ref(false);
+const liveHostEl = ref<HTMLElement | null>(null);
+const liveLoading = ref(false);
+const liveFailed = ref(false);
+const liveReady = ref(false);
+let previewAbort: AbortController | null = null;
+let previewSeq = 0;
+let liveAbort: AbortController | null = null;
+let liveSeq = 0;
+const liveController = new LivePreviewController();
 
 const uploadVisible = ref(false);
 const uploading = ref(false);
@@ -166,6 +184,9 @@ async function ensureDetail(modelId: number, force = false) {
 }
 
 async function selectModel(modelId: number, resetSkin = true) {
+  cancelPreviewJob();
+  cancelLiveLoad();
+  liveReady.value = false;
   selectedModelId.value = modelId;
   previewBroken.value = false;
   const detail = await ensureDetail(modelId);
@@ -175,8 +196,11 @@ async function selectModel(modelId: number, resetSkin = true) {
 }
 
 function selectSkin(skinId: number) {
+  cancelPreviewJob();
   selectedSkinId.value = skinId;
   previewBroken.value = false;
+  liveFailed.value = false;
+  liveReady.value = false;
 }
 
 watch(previewUrl, () => {
@@ -447,6 +471,256 @@ function isSiteDefaultModel(modelId: number) {
   return defaults.value?.default_model_id === modelId;
 }
 
+
+function needsAssembledPreview(skin: Live2DSkinItem | null | undefined) {
+  if (!skin) return false;
+  // Skip when assembled cache or package-finished preview exists.
+  return skin.preview_kind !== "assembled" && skin.preview_kind !== "bundle";
+}
+
+function cancelPreviewJob() {
+  if (previewAbort) {
+    previewAbort.abort();
+    previewAbort = null;
+  }
+}
+
+function cancelLiveLoad() {
+  if (liveAbort) {
+    liveAbort.abort();
+    liveAbort = null;
+  }
+}
+
+function ensureLiveMounted() {
+  const el = liveHostEl.value;
+  if (!el) return false;
+  liveController.mount(el);
+  return true;
+}
+
+async function loadLiveForSkin(skin: Live2DSkinItem | null) {
+  cancelLiveLoad();
+  liveReady.value = false;
+  liveFailed.value = false;
+  if (!skin?.rel_path) {
+    liveLoading.value = false;
+    liveController.destroy();
+    return;
+  }
+  if (!ensureLiveMounted()) {
+    // Host not ready yet (first paint); retry next tick via watcher path.
+    liveLoading.value = true;
+    await new Promise<void>(r => requestAnimationFrame(() => r()));
+    if (!ensureLiveMounted()) {
+      liveLoading.value = false;
+      liveFailed.value = true;
+      return;
+    }
+  }
+
+  const ac = new AbortController();
+  liveAbort = ac;
+  const seq = ++liveSeq;
+  liveLoading.value = true;
+  try {
+    await liveController.load({
+      modelJsonUrl: skinModelJsonUrl(skin.rel_path),
+      timeoutMs: 15000,
+      signal: ac.signal
+    });
+    if (ac.signal.aborted || seq !== liveSeq) return;
+    liveReady.value = true;
+    liveFailed.value = false;
+  } catch (e: any) {
+    if (e?.name === "AbortError" || ac.signal.aborted || seq !== liveSeq) return;
+    liveReady.value = false;
+    liveFailed.value = true;
+  } finally {
+    if (seq === liveSeq) {
+      liveLoading.value = false;
+      if (liveAbort === ac) liveAbort = null;
+    }
+  }
+}
+
+async function snapshotCurrentLive(signal?: AbortSignal): Promise<Blob> {
+  if (!liveController.ready) {
+    throw new Error("Live preview is not ready");
+  }
+  return liveController.snapshot(signal);
+}
+
+function patchSkinInCaches(skin: Live2DSkinItem) {
+  const detail = detailMap.value[skin.model_id];
+  if (detail) {
+    detailMap.value = {
+      ...detailMap.value,
+      [skin.model_id]: {
+        ...detail,
+        skins: detail.skins.map(s => (s.id === skin.id ? { ...s, ...skin } : s)),
+        preview_url:
+          detail.default_skin_id === skin.id ||
+          (!detail.default_skin_id && detail.skins[0]?.id === skin.id)
+            ? skin.preview_url
+            : detail.preview_url,
+        preview_kind:
+          detail.default_skin_id === skin.id ||
+          (!detail.default_skin_id && detail.skins[0]?.id === skin.id)
+            ? skin.preview_kind
+            : detail.preview_kind
+      }
+    };
+  }
+  const listRow = dataList.value.find(m => m.id === skin.model_id);
+  if (listRow) {
+    const preferredId =
+      listRow.default_skin_id ??
+      detailMap.value[skin.model_id]?.skins.find(s => s.enabled)?.id ??
+      detailMap.value[skin.model_id]?.skins[0]?.id;
+    if (preferredId === skin.id) {
+      listRow.preview_url = skin.preview_url ?? null;
+      listRow.preview_kind = skin.preview_kind ?? null;
+    }
+  }
+}
+
+async function generatePreviewForSkin(
+  skin: Live2DSkinItem,
+  opts: { force?: boolean; silent?: boolean } = {}
+) {
+  if (!skin?.id) return false;
+  if (!opts.force && !needsAssembledPreview(skin)) {
+    return true;
+  }
+
+  cancelPreviewJob();
+  const ac = new AbortController();
+  previewAbort = ac;
+  const seq = ++previewSeq;
+  previewGenerating.value = true;
+  previewGenLabel.value = `生成预览 · ${skin.label || "#" + skin.id}`;
+  previewBroken.value = false;
+
+  try {
+    let blob: Blob;
+    const isCurrent = selectedSkinId.value === skin.id;
+    // Prefer snapshot from the right-panel live canvas (no second full instance).
+    if (isCurrent && liveController.ready && !liveFailed.value) {
+      blob = await snapshotCurrentLive(ac.signal);
+    } else if (isCurrent && liveLoading.value) {
+      // Wait briefly for live, then snapshot; else fall back offscreen.
+      const started = Date.now();
+      while (liveLoading.value && Date.now() - started < 16000) {
+        if (ac.signal.aborted || seq !== previewSeq) return false;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      if (liveController.ready && !liveFailed.value) {
+        blob = await snapshotCurrentLive(ac.signal);
+      } else {
+        blob = await captureAssembledPreview({
+          modelJsonUrl: skinModelJsonUrl(skin.rel_path),
+          width: 512,
+          height: 512,
+          timeoutMs: 12000,
+          signal: ac.signal
+        });
+      }
+    } else {
+      blob = await captureAssembledPreview({
+        modelJsonUrl: skinModelJsonUrl(skin.rel_path),
+        width: 512,
+        height: 512,
+        timeoutMs: 12000,
+        signal: ac.signal
+      });
+    }
+    if (ac.signal.aborted || seq !== previewSeq) return false;
+    const updated = await uploadSkinPreviewCache(skin.id, blob);
+    if (ac.signal.aborted || seq !== previewSeq) return false;
+    patchSkinInCaches(updated);
+    if (!opts.silent) {
+      message("预览已生成", { type: "success" });
+    }
+    return true;
+  } catch (e: any) {
+    if (e?.name === "AbortError" || ac.signal.aborted || seq !== previewSeq) {
+      return false;
+    }
+    message(e?.message ?? "预览生成失败，已回退贴图/旧缓存", { type: "error" });
+    return false;
+  } finally {
+    if (seq === previewSeq) {
+      previewGenerating.value = false;
+      previewGenLabel.value = "";
+      if (previewAbort === ac) previewAbort = null;
+    }
+  }
+}
+
+async function regenerateCurrentPreview() {
+  if (!selectedSkin.value) {
+    message("请先选择装扮", { type: "warning" });
+    return;
+  }
+  await generatePreviewForSkin(selectedSkin.value, { force: true });
+}
+
+async function generateMissingForModel() {
+  const detail = selectedDetail.value;
+  if (!detail?.skins?.length) {
+    message("当前模型没有装扮", { type: "warning" });
+    return;
+  }
+  const targets = detail.skins.filter(s => needsAssembledPreview(s));
+  if (!targets.length) {
+    message("本模型没有缺失的组装预览", { type: "success" });
+    return;
+  }
+  batchGenerating.value = true;
+  let ok = 0;
+  let fail = 0;
+  try {
+    for (const skin of targets) {
+      // concurrency 1
+      const success = await generatePreviewForSkin(skin, { force: false, silent: true });
+      if (success) ok += 1;
+      else fail += 1;
+    }
+    message(`本模型缺失预览：成功 ${ok}，失败 ${fail}`, {
+      type: fail ? "warning" : "success"
+    });
+  } finally {
+    batchGenerating.value = false;
+  }
+}
+
+
+watch(
+  () => {
+    const skin = selectedSkin.value;
+    return skin ? `${skin.id}:${skin.rel_path}` : "";
+  },
+  async () => {
+    const skin = selectedSkin.value;
+    await loadLiveForSkin(skin);
+    if (
+      skin &&
+      needsAssembledPreview(skin) &&
+      liveController.ready &&
+      !liveFailed.value
+    ) {
+      await generatePreviewForSkin(skin, { silent: true });
+    }
+  }
+);
+
+onUnmounted(() => {
+  cancelPreviewJob();
+  cancelLiveLoad();
+  liveController.destroy();
+});
+
 onMounted(() => onSearch());
 </script>
 
@@ -544,23 +818,78 @@ onMounted(() => onSearch());
         <div v-else class="main-body" v-loading="detailLoading">
           <div class="preview-row">
             <div class="preview-stage">
+              <div
+                ref="liveHostEl"
+                class="live-host"
+                :class="{ hidden: !selectedSkin || liveFailed }"
+              />
               <img
-                v-if="previewUrl && !previewBroken"
+                v-if="
+                  selectedSkin &&
+                  (liveFailed || liveLoading) &&
+                  previewUrl &&
+                  !previewBroken
+                "
+                class="fallback-img"
+                :class="{ dim: liveLoading && !liveFailed }"
                 :src="previewUrl"
                 alt="skin preview"
                 @error="previewBroken = true"
               />
-              <div v-else class="fail-note">
-                <div>{{ selectedSkin ? "无预览 / 贴图加载失败" : "请选择装扮" }}</div>
-                <div class="sub">静态 textures[0]，未嵌入 OML2D</div>
+              <div
+                v-else-if="!selectedSkin"
+                class="fail-note"
+              >
+                <div>请选择装扮</div>
+                <div class="sub">右栏为单实例 Cubism2 live；失败时回退静图</div>
+              </div>
+              <div
+                v-else-if="liveFailed && (!previewUrl || previewBroken)"
+                class="fail-note"
+              >
+                <div>Live 预览失败 / 无静图</div>
+                <div class="sub">已尝试贴图回退；可点重新生成</div>
+              </div>
+              <div v-if="liveLoading || previewGenerating" class="preview-mask">
+                <div class="spin" />
+                <div>
+                  {{
+                    previewGenerating
+                      ? previewGenLabel || "生成预览中…"
+                      : "加载 Live 预览…"
+                  }}
+                </div>
               </div>
               <div v-if="selectedSkin" class="preview-caption">
                 {{ selectedSkin.label }}
+                <span v-if="!liveFailed && liveReady"> · Live</span>
+                <span v-else-if="selectedSkin.preview_kind === 'assembled'"> · 组装预览</span>
+                <span v-else-if="selectedSkin.preview_kind === 'bundle'"> · 包内预览</span>
+                <span v-else-if="selectedSkin.preview_kind === 'atlas'"> · 贴图回退</span>
                 <span v-if="!selectedSkin.enabled"> · 已禁用</span>
               </div>
+              <div v-if="selectedSkin" class="preview-toolbar" @click.stop>
+                <el-button
+                  size="small"
+                  type="primary"
+                  plain
+                  :loading="previewGenerating && !batchGenerating"
+                  :disabled="batchGenerating"
+                  @click="regenerateCurrentPreview"
+                >
+                  重新生成
+                </el-button>
+                <el-button
+                  size="small"
+                  :loading="batchGenerating"
+                  :disabled="previewGenerating && !batchGenerating"
+                  @click="generateMissingForModel"
+                >
+                  生成本模型缺失
+                </el-button>
+              </div>
             </div>
-
-            <div class="side-card">
+<div class="side-card">
               <h3>{{ selectedModel.name }}</h3>
               <div class="kv">
                 <div>
@@ -636,7 +965,7 @@ onMounted(() => onSearch());
           <div class="skins-block">
             <div class="skins-hd">
               <h4>装扮</h4>
-              <span class="hint">选中高亮；可改 label / sort；rel_path 只读</span>
+              <span class="hint">选中高亮；可改 label / sort；预览由模型渲染生成；rel_path 只读</span>
             </div>
             <div v-if="selectedDetail?.skins?.length" class="skin-grid">
               <div
@@ -1052,12 +1381,37 @@ onMounted(() => onSearch());
   position: relative;
   overflow: hidden;
 }
-.preview-stage img {
+.live-host {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.live-host.hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+.live-host :deep(canvas),
+.live-host canvas {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.12));
+}
+.preview-stage img,
+.preview-stage .fallback-img {
   max-height: 92%;
   max-width: 70%;
   object-fit: contain;
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.12));
   transition: opacity 0.15s ease;
+  position: relative;
+  z-index: 0;
+}
+.preview-stage .fallback-img.dim {
+  opacity: 0.35;
 }
 .preview-caption {
   position: absolute;
@@ -1069,6 +1423,7 @@ onMounted(() => onSearch());
   padding: 4px 8px;
   font-size: 12px;
   color: var(--l2d-muted);
+  z-index: 3;
 }
 .fail-note {
   color: var(--l2d-muted);
@@ -1210,5 +1565,41 @@ onMounted(() => onSearch());
   .preview-row {
     grid-template-columns: 1fr;
   }
+}
+
+.preview-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--l2d-muted);
+  font-size: 12px;
+  z-index: 4;
+}
+.preview-mask .spin {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #dcdfe6;
+  border-top-color: var(--l2d-primary);
+  border-radius: 50%;
+  animation: l2d-spin 0.8s linear infinite;
+}
+@keyframes l2d-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.preview-toolbar {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 </style>

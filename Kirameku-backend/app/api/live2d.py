@@ -95,6 +95,40 @@ async def upload_skins(
     )
 
 
+@admin_router.post("/skins/{skin_id}/preview-cache", response_model=Live2DSkinOut)
+async def upload_skin_preview_cache(
+    skin_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    _: dict = Depends(get_current_user),
+):
+    """Internal: store assembled Cubism2 snapshot under previews/<model_id>/<skin_id>.png."""
+    raw = await file.read()
+    content_type = file.content_type or ""
+    # sniff if browser omitted content-type
+    if not content_type or content_type == "application/octet-stream":
+        if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+            content_type = "image/png"
+        elif len(raw) >= 12 and raw[0:4] == b"RIFF" and raw[8:12] == b"WEBP":
+            content_type = "image/webp"
+    return live2d_service.save_skin_preview_cache(
+        session,
+        skin_id,
+        data=raw,
+        content_type=content_type,
+    )
+
+
+@admin_router.delete("/skins/{skin_id}/preview-cache", response_model=Live2DSkinOut)
+def delete_skin_preview_cache(
+    skin_id: int,
+    session: Session = Depends(get_session),
+    _: dict = Depends(get_current_user),
+):
+    """Optional: discard assembled preview cache (not an ops 'clear cover' button)."""
+    return live2d_service.delete_skin_preview_cache(session, skin_id)
+
+
 @admin_router.put("/skins/{skin_id}", response_model=Live2DSkinOut)
 def update_skin(
     skin_id: int,
