@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>友链管理端 · 列表+预览线框 v1</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel2: #243044;
+      --line: rgba(148,163,184,.22);
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --sky: #0ea5e9;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+    .tags {
+      flex: 0 0 auto; display: flex; gap: 6px; padding: 8px 12px;
+      border-bottom: 1px solid var(--line); background: #111827;
+      overflow-x: auto; white-space: nowrap;
+    }
+    .tag {
+      padding: 4px 10px; border-radius: 6px; font-size: 12px;
+      background: #1f2937; color: var(--muted); border: 1px solid var(--line);
+    }
+    .tag.active { color: #fff; border-color: var(--sky); background: #0c4a6e; }
+    .note {
+      flex: 0 0 auto; padding: 8px 14px; font-size: 12px; color: var(--muted);
+      border-bottom: 1px solid var(--line);
+    }
+    .page {
+      flex: 1; min-height: 0; min-width: 0; padding: 12px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .card {
+      flex: 1; min-height: 0; min-width: 0;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .toolbar {
+      flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 10px;
+      align-items: center; justify-content: space-between;
+      padding: 12px 14px; border-bottom: 1px solid var(--line);
+    }
+    .toolbar h1 { margin: 0; font-size: 15px; font-weight: 600; }
+    .seg {
+      display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+    }
+    .seg button {
+      appearance: none; border: 0; background: transparent; color: var(--muted);
+      padding: 6px 12px; font-size: 12px; cursor: pointer;
+    }
+    .seg button.on { background: #0c4a6e; color: #fff; }
+    .seg .badge {
+      display: inline-block; margin-left: 4px; min-width: 16px; padding: 0 5px;
+      border-radius: 999px; background: var(--warn); color: #111; font-size: 10px; font-weight: 700;
+    }
+    .actions { display: flex; gap: 8px; }
+    .btn {
+      border: 1px solid var(--line); background: var(--panel2); color: var(--text);
+      border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+    }
+    .btn.primary { background: var(--sky); border-color: transparent; color: #fff; font-weight: 600; }
+    .main {
+      flex: 1; min-height: 0; min-width: 0;
+      display: grid; grid-template-columns: 15fr 9fr; gap: 0;
+    }
+    .pane { min-width: 0; min-height: 0; overflow: auto; }
+    .pane.left { border-right: 1px solid var(--line); }
+    .pane.right {
+      background: linear-gradient(180deg, #172033, #1e293b);
+      display: flex; flex-direction: column; gap: 14px; padding: 16px;
+    }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+    th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--panel); z-index: 1; }
+    tr { cursor: pointer; }
+    tr:hover { background: rgba(14,165,233,.06); }
+    tr.selected { background: rgba(14,165,233,.12); }
+    tr.pending td:first-child { box-shadow: inset 3px 0 0 var(--sky); }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 999px; object-fit: cover;
+      background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff;
+      display: inline-flex; align-items: center; justify-content: center; font-weight: 700;
+    }
+    .name { font-weight: 600; }
+    .desc { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .url {
+      display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      color: #7dd3fc; text-decoration: none;
+    }
+    .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    }
+    .pill.ok { background: rgba(34,197,94,.15); color: #86efac; }
+    .pill.warn { background: rgba(245,158,11,.18); color: #fcd34d; }
+    .ops { display: flex; gap: 6px; }
+    .linkbtn { background: none; border: 0; color: #7dd3fc; cursor: pointer; font-size: 12px; padding: 0; }
+    .linkbtn.danger { color: #f87171; }
+    .preview-card {
+      width: 100%; max-width: 280px; margin: 8px auto 0;
+      border-radius: 20px; padding: 22px 18px 20px;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+      text-align: center; position: relative;
+    }
+    .preview-card .status {
+      position: absolute; top: 12px; left: 12px;
+    }
+    .preview-avatar-wrap {
+      width: 72px; height: 72px; margin: 8px auto 12px; border-radius: 999px; padding: 3px;
+      background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
+    }
+    .preview-avatar-wrap img, .preview-avatar-wrap .ph {
+      width: 100%; height: 100%; border-radius: 999px; object-fit: cover; display: block;
+      background: #0f172a;
+    }
+    .preview-avatar-wrap .ph {
+      display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700;
+    }
+    .preview-card h2 { margin: 0 0 8px; font-size: 16px; }
+    .preview-card p { margin: 0 0 16px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .cta {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 999px; background: var(--sky); color: #fff;
+      font-size: 12px; font-weight: 600; text-decoration: none;
+      box-shadow: 0 8px 20px rgba(14,165,233,.25);
+    }
+    .sea h3 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; }
+    .sea-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 4px;
+      border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid var(--line);
+      cursor: pointer; font-size: 11px; color: var(--text);
+    }
+    .chip img, .chip .ph {
+      width: 22px; height: 22px; border-radius: 999px; object-fit: cover;
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      display: inline-flex; align-items: center; justify-content: center; font-size: 10px;
+    }
+    .empty { color: var(--muted); text-align: center; padding: 40px 12px; font-size: 13px; }
+    @media (max-width: 1099px) {
+      .main { grid-template-columns: 1fr; }
+      .pane.left { border-right: 0; border-bottom: 1px solid var(--line); max-height: 55vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="tags" title="模拟 PureAdmin 顶栏 tags-view：改版后必须仍可见">
+    <span class="tag">首页</span>
+    <span class="tag active">友链管理</span>
+    <span class="tag">看板娘</span>
+    <span class="tag">文章</span>
+  </div>
+  <div class="note">线框 v1 · 左列表（紧凑表）+ 右预览（前台详情卡语汇）· 顶栏 tab 不被挤没 · 筛选角标不塞进 radio 子树</div>
+  <div class="page">
+    <div class="card">
+      <div class="toolbar">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <h1>友链管理</h1>
+          <div class="seg" role="tablist">
+            <button type="button" class="on">全部</button>
+            <button type="button">待审核<span class="badge">2</span></button>
+            <button type="button">已通过</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" type="button">打开前台</button>
+          <button class="btn primary" type="button">新增友链</button>
+        </div>
+      </div>
+      <div class="main">
+        <div class="pane left">
+          <table>
+            <colgroup>
+              <col style="width:56px" />
+              <col style="width:28%" />
+              <col />
+              <col style="width:88px" />
+              <col style="width:64px" />
+              <col style="width:120px" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>头像</th><th>名称</th><th>链接</th><th>状态</th><th>排序</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="pending selected">
+                <td><span class="avatar">漂</span></td>
+                <td>
+                  <div class="name">漂流瓶申请人</div>
+                  <div class="desc">来自公开申请 · 等审核</div>
+                </td>
+                <td><a class="url" href="#">https://very-long-example-domain.com/blog/home/index.html</a></td>
+                <td><span class="pill warn">待审核</span></td>
+                <td>0</td>
+                <td class="ops"><button class="linkbtn">修改</button><button class="linkbtn danger">删除</button></td>
+              </tr>
+              <tr>
+                <td><span class="avatar">K</span></td>
+                <td>
+                  <div class="name">Kirameku</div>
+                  <div class="desc">开源博客参考站</div>
+                </td>
+                <td><a class="url" href="#">https://example.com/kirameku</a></td>
+                <td><span class="pill ok">已审核</span></td>
+                <td>1</td>
+                <td class="ops"><button class="linkbtn">修改</button><button class="linkbtn danger">删除</button></td>
+              </tr>
+              <tr>
+                <td><span class="avatar">小</span></td>
+                <td>
+                  <div class="name">小宇宙</div>
+                  <div class="desc">这个朋友很懒，没有留下描述~</div>
+                </td>
+                <td><a class="url" href="#">https://xiaoyu-hh.cn</a></td>
+                <td><span class="pill ok">已审核</span></td>
+                <td>2</td>
+                <td class="ops"><button class="linkbtn">修改</button><button class="linkbtn danger">删除</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pane right">
+          <div class="preview-card">
+            <span class="status pill warn">待审核</span>
+            <div class="preview-avatar-wrap"><div class="ph">漂</div></div>
+            <h2>漂流瓶申请人</h2>
+            <p>来自公开申请 · 等审核</p>
+            <a class="cta" href="#">访问主页</a>
+          </div>
+          <div class="sea">
+            <h3>前台可见 · 2</h3>
+            <div class="sea-row">
+              <div class="chip"><span class="ph">K</span>Kirameku</div>
+              <div class="chip"><span class="ph">小</span>小宇宙</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
