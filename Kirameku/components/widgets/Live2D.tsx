@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Script from "next/script";
+import { installHitAreaTap, type StageDragState } from "./live2dHitAreaTap";
 
 /**
  * 看板娘引擎：OhMyLive2D（默认）或旧 waifu/autoload（回退）。
@@ -94,6 +95,8 @@ type ModelsApi = {
   model?: Live2DModelLike;
   currentModelOptions?: Oml2dModel;
   create: () => Promise<unknown>;
+  playMotion: (motionGroupName: string, index?: number) => void;
+  playRandomMotion: (areaName: string[]) => void;
 };
 
 type MenusApi = {
@@ -370,7 +373,7 @@ function syncSavedWaifuPosition(): void {
 }
 
 /** 与旧 waifu-tips.js initDrag 对等的 #oml2d-stage 拖拽；菜单区域不触发拖。 */
-function installStageDrag(oml2d: Oml2dApi): () => void {
+function installStageDrag(oml2d: Oml2dApi, dragState?: StageDragState): () => void {
   const stage = document.getElementById("oml2d-stage");
   if (!stage) return () => {};
 
@@ -401,6 +404,7 @@ function installStageDrag(oml2d: Oml2dApi): () => void {
     origLeft = pos.left;
     origTop = pos.top;
     moved = false;
+    if (dragState) dragState.moved = false;
   };
 
   const onMove = (e: MouseEvent | TouchEvent) => {
@@ -408,6 +412,7 @@ function installStageDrag(oml2d: Oml2dApi): () => void {
     e.preventDefault();
     if (!moved) {
       moved = true;
+      if (dragState) dragState.moved = true;
       oml2d.tipsMessage(pick(DRAG_START_TIPS), 2000, 8);
     }
     const ev = "touches" in e ? e.touches[0] : e;
@@ -775,6 +780,7 @@ export default function Live2D() {
     let instance: Oml2dApi | null = null;
     let unbindTips: (() => void) | null = null;
     let unbindDrag: (() => void) | null = null;
+    let unbindHitTap: (() => void) | null = null;
     // OML2D 会覆盖 document.oncopy（复制提示），卸载时恢复
     const prevOnCopy = document.oncopy;
 
@@ -870,7 +876,9 @@ export default function Live2D() {
       installLayoutFix(instance);
       installMenuHoverFix(instance);
       installWaifuPositionPersistence(instance);
-      unbindDrag = installStageDrag(instance);
+      const dragState: StageDragState = { moved: false };
+      unbindDrag = installStageDrag(instance, dragState);
+      unbindHitTap = installHitAreaTap(instance, dragState);
       unbindTips = bindLegacyTips(instance, tipsData);
     })().catch((err) => {
       console.error("[Live2D] OhMyLive2D 初始化失败：", err);
@@ -880,6 +888,7 @@ export default function Live2D() {
       cancelled = true;
       unbindTips?.();
       unbindDrag?.();
+      unbindHitTap?.();
       // OML2D 0.19.3 无公开 destroy；用「停止渲染循环 + 移除 DOM」兜底，避免路由切换泄漏
       const app = instance?.pixiApp?.app as { destroy?: (removeView?: boolean) => void } | undefined;
       app?.destroy?.(true);
