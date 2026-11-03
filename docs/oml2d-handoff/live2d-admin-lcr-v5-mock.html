@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>看板娘管理端 · 真·左中右三栏并排 v5</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-elev: #121a2f;
+    --pane: #151e36;
+    --pane-2: #1a2542;
+    --border: #2a3658;
+    --border-hi: #3d4f7a;
+    --text: #e8eefc;
+    --muted: #8b9bb8;
+    --primary: #5b8cff;
+    --primary-soft: rgba(91, 140, 255, 0.16);
+    --accent: #37d6c5;
+    --accent-soft: rgba(55, 214, 197, 0.14);
+    --warn: #f0b429;
+    --danger: #f07178;
+    --ok: #7fd992;
+    --cols: 6fr 12fr 6fr; /* 6:12:6 default · 中栏预览加宽 */
+    --gutter: 12px;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, rgba(91,140,255,.18), transparent 55%),
+      radial-gradient(900px 500px at 90% 0%, rgba(55,214,197,.10), transparent 50%),
+      var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+  }
+
+  /* —— 顶注：强调真·左中右 —— */
+  .banner {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    background: linear-gradient(90deg, rgba(55,214,197,.18), rgba(91,140,255,.14));
+    border-bottom: 1px solid var(--border-hi);
+    font-size: 13px;
+  }
+  .banner strong {
+    color: var(--accent);
+    letter-spacing: .02em;
+  }
+  .banner .vs {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .banner .vs s { color: var(--danger); text-decoration: line-through; opacity: .85; }
+
+  .chrome {
+    flex: 0 0 auto;
+    padding: 12px 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  h1 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: .02em;
+  }
+  .title-row .meta {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .picker .label {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .picker button {
+    border: 1px solid var(--border);
+    background: var(--pane);
+    color: var(--text);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: .15s ease;
+  }
+  .picker button:hover { border-color: var(--border-hi); }
+  .picker button.on {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    color: #c9dbff;
+    font-weight: 700;
+    box-shadow: 0 0 0 1px rgba(91,140,255,.35) inset;
+  }
+  .picker .hint {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* —— 页头（业务顶栏，非预览带） —— */
+  .page-header {
+    flex: 0 0 auto;
+    margin: 0 16px;
+    margin-top: 10px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .page-header .name {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .page-header .name em {
+    font-style: normal;
+    color: var(--muted);
+    font-weight: 400;
+    margin-left: 8px;
+    font-size: 11px;
+  }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--border);
+    background: var(--pane);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 5px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .btn.primary {
+    background: linear-gradient(180deg, #6a98ff, #4a7ef0);
+    border-color: #6a98ff;
+    color: #fff;
+    font-weight: 600;
+  }
+  .btn.ghost { color: var(--muted); }
+
+  /* —— 真·单行三列 —— */
+  .workspace {
+    flex: 1;
+    min-height: 0;
+    margin: 12px 16px 16px;
+    display: grid;
+    grid-template-columns: var(--cols);
+    gap: var(--gutter);
+    /* 强制可视高度：保证左右可独立滚动 */
+    height: calc(100dvh - 168px);
+    min-height: 520px;
+  }
+
+  .col {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--pane);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 8px 28px rgba(0,0,0,.28);
+  }
+  .col::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    pointer-events: none;
+  }
+  .col.left::before { background: linear-gradient(90deg, var(--primary), transparent); }
+  .col.center::before { background: linear-gradient(90deg, var(--accent), transparent); }
+  .col.right::before { background: linear-gradient(90deg, var(--warn), transparent); }
+
+  /* 列头：醒目标签 左/中/右 */
+  .col-hd {
+    flex: 0 0 auto;
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--pane-2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .col-hd .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: .04em;
+  }
+  .col-hd .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #0b1020;
+  }
+  .col.left .badge { background: var(--primary); }
+  .col.center .badge { background: var(--accent); }
+  .col.right .badge { background: var(--warn); }
+  .col-hd .sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-hi) transparent;
+  }
+  .scroll::-webkit-scrollbar { width: 8px; }
+  .scroll::-webkit-scrollbar-thumb {
+    background: var(--border-hi);
+    border-radius: 8px;
+  }
+
+  /* 左：模型列表 */
+  .model {
+    display: grid;
+    grid-template-columns: 46px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(42,54,88,.65);
+    cursor: pointer;
+  }
+  .model:hover { background: rgba(91,140,255,.06); }
+  .model.active {
+    background: var(--primary-soft);
+    box-shadow: inset 3px 0 0 var(--primary);
+  }
+  .thumb {
+    width: 46px;
+    height: 46px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background:
+      linear-gradient(135deg, #243056, #1a2340),
+      repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,.03) 4px, rgba(255,255,255,.03) 8px);
+  }
+  .m-name { font-size: 13px; font-weight: 650; }
+  .m-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  /* 中：预览 + meta 同列（非全宽顶带） */
+  .center-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .stage {
+    flex: 1;
+    min-height: 180px;
+    position: relative;
+    overflow: hidden;
+    background:
+      linear-gradient(45deg, rgba(255,255,255,.03) 25%, transparent 25%) 0 0 / 14px 14px,
+      linear-gradient(-45deg, rgba(255,255,255,.03) 25%, transparent 25%) 0 0 / 14px 14px,
+      #0e1528;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .stage .pill {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+    font-size: 11px;
+    background: rgba(15,22,40,.88);
+    border: 1px solid var(--border-hi);
+    color: var(--accent);
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+  .stage .pill.right {
+    left: auto;
+    right: 10px;
+    color: var(--muted);
+  }
+  .figure {
+    width: min(42%, 150px);
+    aspect-ratio: 3 / 5;
+    background: linear-gradient(180deg, #a8c0ef, #5f7eb8 58%, #3f547a);
+    border-radius: 42% 42% 18% 18% / 28% 28% 12% 12%;
+    box-shadow: 0 14px 32px rgba(0,0,0,.45);
+    position: relative;
+  }
+  .figure::after {
+    content: "textures[0] / OML2D capture";
+    position: absolute;
+    left: 50%;
+    bottom: -28px;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .tools {
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,0,0,.15);
+  }
+  .meta-block {
+    flex: 0 0 auto;
+    max-height: 34%;
+    min-height: 0;
+    overflow: auto;
+    padding: 10px 12px 12px;
+    font-size: 12px;
+  }
+  .meta-block .title {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .meta-block .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--muted);
+    margin: 4px 0;
+  }
+  .meta-block .row b { color: var(--text); font-weight: 500; }
+  .meta-block .ops {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  /* 右：装扮列表 */
+  .skin {
+    display: grid;
+    grid-template-columns: 50px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(42,54,88,.65);
+    cursor: pointer;
+  }
+  .skin:hover { background: rgba(240,180,41,.05); }
+  .skin.active {
+    background: var(--accent-soft);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .skin .thumb { width: 50px; height: 50px; }
+  .chip {
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 7px;
+    color: var(--muted);
+  }
+  .chip.on {
+    border-color: rgba(127,217,146,.55);
+    color: var(--ok);
+  }
+
+  .footnote {
+    flex: 0 0 auto;
+    margin: 0 16px 14px;
+    padding: 10px 12px;
+    border: 1px dashed var(--border-hi);
+    border-radius: var(--radius);
+    background: rgba(18,26,47,.7);
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+  .footnote strong { color: var(--text); }
+
+  /* 列间视觉分隔提示（grid gap 之外再强化） */
+  .col.center {
+    outline: 1px solid rgba(55,214,197,.22);
+  }
+
+  @media (max-width: 1100px) {
+    .workspace {
+      grid-template-columns: 1fr;
+      height: auto;
+      min-height: 0;
+    }
+    .col { min-height: 280px; }
+    .col.center { min-height: 420px; }
+  }
+</style>
+</head>
+<body>
+  <div class="banner">
+    <div>
+      <strong>真·左中右三栏并排</strong>
+      <span class="vs">（非 <s>上预览 · 下双栏</s>）</span>
+    </div>
+    <div class="vs">默认 <strong style="color:var(--accent)">6:12:6</strong>（中栏预览加宽）· 单行 grid · 预览只占<strong style="color:var(--accent)">中列</strong> · 不跨全宽</div>
+  </div>
+
+  <div class="chrome">
+    <div class="title-row">
+      <h1>看板娘管理端 · LCR v5 线框</h1>
+      <div class="meta">Kirameku-blog admin · 默认 6:12:6（中栏预览加宽）· Fit 沿用 PR #22</div>
+    </div>
+    <div class="picker">
+      <span class="label">24 栅格比例：</span>
+      <button type="button" class="on" data-cols="6fr 12fr 6fr" data-hint="6:12:6 · 中栏预览加宽（默认）">6 : 12 : 6</button>
+      <button type="button" data-cols="1fr 1fr 1fr" data-hint="8:8:8 · 三栏均分（备选）">8 : 8 : 8</button>
+      <button type="button" data-cols="6fr 6fr 12fr" data-hint="6:6:12 · 右装扮更宽（备选）">6 : 6 : 12</button>
+      <span class="hint" id="ratioHint">6:12:6 · 中栏预览加宽（默认）</span>
+    </div>
+  </div>
+
+  <header class="page-header">
+    <div class="name">Live2D 管理<em>页头仅工具，不是预览带</em></div>
+    <div class="actions">
+      <span class="btn ghost">站点默认</span>
+      <span class="btn">导入模型</span>
+      <span class="btn primary">上传 Zip</span>
+    </div>
+  </header>
+
+  <!-- ★ 唯一主布局：横向三列 -->
+  <div class="workspace" id="workspace" aria-label="左模型 · 中预览 · 右装扮">
+    <!-- 左 -->
+    <section class="col left" aria-label="左·模型">
+      <div class="col-hd">
+        <div class="tag"><span class="badge">左</span>左·模型</div>
+        <span class="sub">独立滚动</span>
+      </div>
+      <div class="scroll" id="modelScroll">
+        <!-- tall list for independent scroll demo -->
+        <div class="model active"><div class="thumb"></div><div><div class="m-name">Girls Frontline kp31</div><div class="m-sub">6 装扮 · Cubism2</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 B</div><div class="m-sub">2 装扮 · Cubism4</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 C</div><div class="m-sub">6 装扮 · Cubism2</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 D</div><div class="m-sub">1 装扮 · Cubism3</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 E</div><div class="m-sub">3 装扮 · Cubism2</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 F</div><div class="m-sub">5 装扮 · Cubism4</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 G</div><div class="m-sub">2 装扮 · Cubism2</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 H</div><div class="m-sub">4 装扮 · Cubism2</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 I</div><div class="m-sub">3 装扮 · Cubism4</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 J</div><div class="m-sub">7 装扮 · Cubism2</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 K</div><div class="m-sub">1 装扮 · Cubism3</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 L</div><div class="m-sub">2 装扮 · Cubism2</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 M</div><div class="m-sub">5 装扮 · Cubism4</div></div></div>
+        <div class="model"><div class="thumb"></div><div><div class="m-name">示例模型 N</div><div class="m-sub">4 装扮 · Cubism2</div></div></div>
+      </div>
+    </section>
+
+    <!-- 中：预览+meta 同列 -->
+    <section class="col center" aria-label="中·预览">
+      <div class="col-hd">
+        <div class="tag"><span class="badge">中</span>中·预览</div>
+        <span class="sub">仅占本列宽 · 非全宽顶带</span>
+      </div>
+      <div class="center-body">
+        <div class="stage">
+          <span class="pill">fitModelToStage · contain</span>
+          <span class="pill right">列内舞台</span>
+          <div class="figure" aria-hidden="true"></div>
+        </div>
+        <div class="tools">
+          <span class="btn primary">重新生成</span>
+          <span class="btn">生成本模型缺失</span>
+        </div>
+        <div class="meta-block">
+          <div class="title">Girls Frontline~ kp31</div>
+          <div class="row"><span>slug</span><b>girls-frontline-kp31</b></div>
+          <div class="row"><span>启用 / 排序</span><b>是 · 10</b></div>
+          <div class="row"><span>preview_kind</span><b>static textures[0] / OML2D capture</b></div>
+          <div class="ops">
+            <span class="btn">改名</span>
+            <span class="btn">追加装扮</span>
+            <span class="btn">设默认</span>
+            <span class="btn ghost">删除</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右 -->
+    <section class="col right" aria-label="右·装扮">
+      <div class="col-hd">
+        <div class="tag"><span class="badge">右</span>右·装扮</div>
+        <span class="sub">独立滚动 · 点即中栏变</span>
+      </div>
+      <div class="scroll" id="skinScroll">
+        <div class="skin active"><div class="thumb"></div><div><div class="m-name">默认装</div><div class="m-sub">rel/default</div></div><span class="chip on">默认</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">冬装</div><div class="m-sub">rel/winter</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">夏装</div><div class="m-sub">rel/summer</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">礼服</div><div class="m-sub">rel/formal</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">校服</div><div class="m-sub">rel/school</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">泳装</div><div class="m-sub">rel/swim</div></div><span class="chip">停用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">春节</div><div class="m-sub">rel/cny</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">万圣节</div><div class="m-sub">rel/halloween</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">圣诞</div><div class="m-sub">rel/xmas</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">雨衣</div><div class="m-sub">rel/rain</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">睡衣</div><div class="m-sub">rel/sleep</div></div><span class="chip">停用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">战斗服</div><div class="m-sub">rel/battle</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">偶像</div><div class="m-sub">rel/idol</div></div><span class="chip on">启用</span></div>
+        <div class="skin"><div class="thumb"></div><div><div class="m-name">旅行</div><div class="m-sub">rel/travel</div></div><span class="chip on">启用</span></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="footnote">
+    <strong>结构核对：</strong>页头下方是一条 <code>display:grid; grid-template-columns: 6fr 12fr 6fr</code>（默认 6:12:6）的<strong>单行三列</strong>。
+    预览舞台与模型元信息都在<strong>中列内部</strong>纵向堆叠，绝不做成「上预览全宽 + 下左右双列表」。
+    左/右各自 <code>overflow:auto</code>；中列舞台 <code>flex:1</code> 吃满列高。Fit 继续用 #22 <code>fitModelToStage</code>，本线框不嵌第二套引擎。
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var hint = document.getElementById('ratioHint');
+      document.querySelectorAll('.picker button[data-cols]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.querySelectorAll('.picker button').forEach(function (b) { b.classList.remove('on'); });
+          btn.classList.add('on');
+          root.style.setProperty('--cols', btn.getAttribute('data-cols'));
+          hint.textContent = btn.getAttribute('data-hint') || '';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
