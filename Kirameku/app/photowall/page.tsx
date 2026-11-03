@@ -7,6 +7,7 @@ import AlbumCard from "@/components/photos/AlbumCard";
 import type { Album } from "@/components/photos/AlbumCard";
 import Lightbox from "@/components/photos/Lightbox";
 import type { Photo } from "@/data/photos";
+import { PhotoWallGridSkeleton } from "@/components/ui/ContentSkeleton";
 import { getAlbums, getAlbumPhotos } from "@/app/api";
 
 export default function PhotoWallPage() {
@@ -31,14 +32,16 @@ export default function PhotoWallPage() {
   }, [expandedId, lightboxOpen]);
 
   useEffect(() => {
+    const ac = new AbortController();
     async function fetchData() {
       try {
-        const albumList = await getAlbums();
+        const albumList = await getAlbums({ signal: ac.signal });
+        if (ac.signal.aborted) return;
         albumList.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
         const results = await Promise.all(
           albumList.map(async (album) => {
-            const photos = await getAlbumPhotos(album.id);
+            const photos = await getAlbumPhotos(album.id, { signal: ac.signal });
             return {
               id: album.id,
               title: album.title,
@@ -54,14 +57,19 @@ export default function PhotoWallPage() {
           })
         );
 
+        if (ac.signal.aborted) return;
         setAlbums(results);
-      } catch {
+      } catch (err: unknown) {
+        if (ac.signal.aborted) return;
+        const name = err && typeof err === "object" && "name" in err ? String((err as { name: string }).name) : "";
+        if (name === "AbortError") return;
         setAlbums([]);
       } finally {
-        setLoading(false);
+        if (!ac.signal.aborted) setLoading(false);
       }
     }
     fetchData();
+    return () => { ac.abort(); };
   }, []);
 
   const openLightbox = (photos: Photo[], index: number) => {
@@ -88,9 +96,7 @@ export default function PhotoWallPage() {
 
       {/* 加载状态 */}
       {loading ? (
-        <div className="flex items-center justify-center py-20 md:py-32">
-          <div className="w-6 h-6 md:w-8 md:h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <PhotoWallGridSkeleton count={6} />
       ) : albums.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 md:py-32 text-slate-400">
           <Camera className="w-8 h-8 md:w-12 md:h-12 mb-3 md:mb-4 opacity-40" />

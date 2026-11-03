@@ -53,11 +53,11 @@ import {
   Clock,
   Eye,
   Heart,
-  Loader2,
 } from "lucide-react";
 import { getPostBySlug, likePost, type PostDetail } from "@/app/api";
 import ReadingProgress from "@/components/ui/ReadingProgress";
 import PostComments from "@/components/posts/PostComments";
+import { PostDetailSkeleton } from "@/components/ui/ContentSkeleton";
 
 export default function PostDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -74,21 +74,24 @@ export default function PostDetailPage() {
 
   useEffect(() => {
     if (!slug) return;
-    let active = true;
-    getPostBySlug(slug)
+    const ac = new AbortController();
+    setLoading(true);
+    setError(false);
+    setPost(null);
+    getPostBySlug(slug, { signal: ac.signal })
       .then((data) => {
-        if (active) {
-          setPost(data);
-          setLoading(false);
-        }
+        if (ac.signal.aborted) return;
+        setPost(data);
+        setLoading(false);
       })
-      .catch(() => {
-        if (active) {
-          setError(true);
-          setLoading(false);
-        }
+      .catch((err: unknown) => {
+        if (ac.signal.aborted) return;
+        const name = err && typeof err === "object" && "name" in err ? String((err as { name: string }).name) : "";
+        if (name === "AbortError") return;
+        setError(true);
+        setLoading(false);
       });
-    return () => { active = false; };
+    return () => { ac.abort(); };
   }, [slug]);
 
   // 代码高亮
@@ -126,11 +129,7 @@ export default function PostDetailPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
-      </div>
-    );
+    return <PostDetailSkeleton />;
   }
 
   if (error || !post) {

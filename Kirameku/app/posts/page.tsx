@@ -6,6 +6,7 @@ import { flushSync } from "react-dom";
 import { motion } from "framer-motion";
 import { BookOpen, Loader2 } from "lucide-react";
 import PostCard, { type PostOut } from "@/components/posts/PostCard";
+import { PostCardGridSkeleton } from "@/components/ui/ContentSkeleton";
 import { getCategories, getPosts, type CategoryItem } from "@/app/api";
 
 const PAGE_SIZE = 12;
@@ -44,8 +45,14 @@ export default function PostsPage() {
   const [skipEnter, setSkipEnter] = useState(false);
   const [, startReactTransition] = useTransition();
   const fetchGen = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
   const initialDone = useRef(false);
-  const switchingRef = useRef(false);
+  const activeCategoryRef = useRef<string | null>(urlCategory);
+  const loadMoreInflight = useRef(false);
+
+  useEffect(() => {
+    activeCategoryRef.current = activeCategory;
+  }, [activeCategory]);
 
   useEffect(() => {
     getCategories()
@@ -56,119 +63,133 @@ export default function PostsPage() {
       .catch(() => {});
   }, []);
 
-  const fetchPage = useCallback(async (category: string | null, pageNum: number) => {
-    return getPosts({
-      status: "published",
-      page: pageNum,
-      size: PAGE_SIZE,
-      ...(category ? { category } : {}),
-    });
-  }, []);
+  const fetchPage = useCallback(
+    async (category: string | null, pageNum: number, signal?: AbortSignal) => {
+      return getPosts(
+        {
+          status: "published",
+          page: pageNum,
+          size: PAGE_SIZE,
+          ...(category ? { category } : {}),
+        },
+        { signal }
+      );
+    },
+    []
+  );
+
+  /** Optimistic category switch + abortable list fetch (SoT §2). */
+  const loadCategory = useCallback(
+    (slug: string | null, opts?: { fromUrl?: boolean; replaceUrl?: boolean }) => {
+      const fromUrl = opts?.fromUrl ?? false;
+      const replaceUrl = opts?.replaceUrl ?? !fromUrl;
+
+      // Ignore same-slug spam (do not lock other tabs)
+      if (!fromUrl && slug === activeCategoryRef.current && initialDone.current) {
+        return;
+      }
+
+      activeCategoryRef.current = slug;
+      setActiveCategory(slug);
+      setPosts([]);
+      setPage(1);
+      setHasMore(true);
+      setSkipEnter(true);
+      setLoading(true);
+
+      if (replaceUrl) {
+        const href = categoryHref(pathname, slug);
+        startReactTransition(() => {
+          router.replace(href, { scroll: false });
+        });
+      }
+
+      abortRef.current?.abort();
+      const ac = new AbortController();
+      abortRef.current = ac;
+      const gen = ++fetchGen.current;
+
+      fetchPage(slug, 1, ac.signal)
+        .then((data) => {
+          if (gen !== fetchGen.current || ac.signal.aborted) return;
+
+          const apply = () => {
+            setPosts(data);
+            setPage(1);
+            setHasMore(data.length === PAGE_SIZE);
+            setSkipEnter(true);
+            setLoading(false);
+            initialDone.current = true;
+          };
+
+          // VT only wraps DOM commit of already-fetched data — never the network
+          if (initialDone.current && canStartViewTransition()) {
+            document.documentElement.classList.add("vt-posts-running");
+            try {
+              const vt = document.startViewTransition(() => {
+                flushSync(apply);
+              });
+              vt.finished.finally(() => {
+                document.documentElement.classList.remove("vt-posts-running");
+              });
+            } catch {
+              document.documentElement.classList.remove("vt-posts-running");
+              apply();
+            }
+          } else {
+            apply();
+          }
+        })
+        .catch((err: unknown) => {
+          if (gen !== fetchGen.current || ac.signal.aborted) return;
+          const name = err && typeof err === "object" && "name" in err ? String((err as { name: string }).name) : "";
+          if (name === "AbortError") return;
+          setPosts([]);
+          setHasMore(false);
+          setLoading(false);
+          initialDone.current = true;
+        });
+    },
+    [fetchPage, pathname, router, startReactTransition]
+  );
 
   // Initial load + browser back/forward when URL category changes externally
   useEffect(() => {
-    if (switchingRef.current) return;
     const next = urlCategory;
-    if (initialDone.current && next === activeCategory) return;
+    if (initialDone.current && next === activeCategoryRef.current) return;
+    loadCategory(next, { fromUrl: true, replaceUrl: false });
+  }, [urlCategory, loadCategory]);
 
-    const gen = ++fetchGen.current;
-    const isFirst = !initialDone.current;
-    if (isFirst) setLoading(true);
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      fetchGen.current += 1;
+    };
+  }, []);
 
-    fetchPage(next, 1)
-      .then((data) => {
-        if (gen !== fetchGen.current) return;
-        const apply = () => {
-          setActiveCategory(next);
-          setPosts(data);
-          setPage(1);
-          setHasMore(data.length === PAGE_SIZE);
-          setSkipEnter(!isFirst);
-          initialDone.current = true;
-        };
-
-        if (!isFirst && canStartViewTransition()) {
-          document.documentElement.classList.add("vt-posts-running");
-          const vt = document.startViewTransition(() => {
-            flushSync(apply);
-          });
-          vt.finished.finally(() => {
-            document.documentElement.classList.remove("vt-posts-running");
-          });
-        } else {
-          apply();
-        }
-      })
-      .catch(() => {
-        if (gen !== fetchGen.current) return;
-        setActiveCategory(next);
-        setPosts([]);
-        setHasMore(false);
-        initialDone.current = true;
-      })
-      .finally(() => {
-        if (gen === fetchGen.current) setLoading(false);
-      });
-    // Drive from URL; activeCategory compared inside to skip no-ops
-  }, [urlCategory, fetchPage]);
-
-  const handleCategoryChange = async (slug: string | null) => {
-    if (slug === activeCategory || switchingRef.current) return;
-
-    const href = categoryHref(pathname, slug);
-    switchingRef.current = true;
-    const gen = ++fetchGen.current;
-
-    try {
-      const data = await fetchPage(slug, 1);
-      if (gen !== fetchGen.current) return;
-
-      const commitDom = () => {
-        flushSync(() => {
-          setActiveCategory(slug);
-          setPosts(data);
-          setPage(1);
-          setHasMore(data.length === PAGE_SIZE);
-          setSkipEnter(true);
-          setLoading(false);
-        });
-      };
-
-      if (canStartViewTransition()) {
-        document.documentElement.classList.add("vt-posts-running");
-        const vt = document.startViewTransition(commitDom);
-        await vt.finished.catch(() => {});
-        document.documentElement.classList.remove("vt-posts-running");
-      } else {
-        commitDom();
-      }
-
-      startReactTransition(() => {
-        router.replace(href, { scroll: false });
-      });
-    } catch {
-      if (gen === fetchGen.current) {
-        setPosts([]);
-        setHasMore(false);
-        setLoading(false);
-      }
-    } finally {
-      switchingRef.current = false;
-    }
+  const handleCategoryChange = (slug: string | null) => {
+    loadCategory(slug, { fromUrl: false, replaceUrl: true });
   };
 
   const handleLoadMore = () => {
+    if (loadMoreInflight.current || loading) return;
     const next = page + 1;
+    loadMoreInflight.current = true;
     setPage(next);
     setLoading(true);
-    fetchPage(activeCategory, next)
+    const gen = fetchGen.current;
+    fetchPage(activeCategoryRef.current, next)
       .then((data) => {
+        if (gen !== fetchGen.current) return;
         setPosts((prev) => [...prev, ...data]);
         setHasMore(data.length === PAGE_SIZE);
         setSkipEnter(true);
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (gen === fetchGen.current) setLoading(false);
+        loadMoreInflight.current = false;
+      });
   };
 
   return (
@@ -215,9 +236,7 @@ export default function PostsPage() {
 
       <div className="vt-posts-list">
         {loading && posts.length === 0 ? (
-          <div className="flex items-center justify-center py-32">
-            <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
-          </div>
+          <PostCardGridSkeleton count={6} />
         ) : posts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-32 text-slate-400">
             <BookOpen className="w-12 h-12 mb-4 opacity-40" />

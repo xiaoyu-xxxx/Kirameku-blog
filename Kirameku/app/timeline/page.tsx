@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Clock, BookOpen, Eye, Heart, Calendar } from "lucide-react";
+import { TimelineRiverSkeleton } from "@/components/ui/ContentSkeleton";
 import { getPosts, type PostItem } from "@/app/api";
 
 // ── 分类样式 ──────────────────────────────────────────
@@ -102,10 +103,21 @@ export default function TimelinePage() {
   }, []);
 
   useEffect(() => {
-    getPosts({ status: "published", page: 1, size: 200 })
-      .then(setAllPosts)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const ac = new AbortController();
+    getPosts({ status: "published", page: 1, size: 200 }, { signal: ac.signal })
+      .then((data) => {
+        if (ac.signal.aborted) return;
+        setAllPosts(data);
+      })
+      .catch((err: unknown) => {
+        if (ac.signal.aborted) return;
+        const name = err && typeof err === "object" && "name" in err ? String((err as { name: string }).name) : "";
+        if (name === "AbortError") return;
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setLoading(false);
+      });
+    return () => { ac.abort(); };
   }, []);
 
   const sorted = useMemo(
@@ -203,9 +215,7 @@ export default function TimelinePage() {
             时光河流 · 记录每一个瞬间
           </p>
         </motion.div>
-        <div className="flex items-center justify-center py-20 md:py-32">
-          <div className="w-6 h-6 md:w-8 md:h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <TimelineRiverSkeleton />
       </div>
     );
   }

@@ -8,6 +8,7 @@ import {
   applyFriendLink,
   type FriendLinkItem,
 } from "@/app/api";
+import { FriendsScatterSkeleton } from "@/components/ui/ContentSkeleton";
 import MessageBottle from "@/components/icons/MessageBottle";
 
 function shuffle<T>(arr: T[]): T[] {
@@ -74,10 +75,21 @@ export default function FriendsPage() {
   }, []);
 
   useEffect(() => {
-    getFriendLinks()
-      .then(setFriends)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const ac = new AbortController();
+    getFriendLinks({ signal: ac.signal })
+      .then((data) => {
+        if (ac.signal.aborted) return;
+        setFriends(data);
+      })
+      .catch((err: unknown) => {
+        if (ac.signal.aborted) return;
+        const name = err && typeof err === "object" && "name" in err ? String((err as { name: string }).name) : "";
+        if (name === "AbortError") return;
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setLoading(false);
+      });
+    return () => { ac.abort(); };
   }, []);
 
   const positions = useMemo(
@@ -231,9 +243,7 @@ export default function FriendsPage() {
         onMouseLeave={handleMouseUp}
       >
         {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="w-6 h-6 md:w-8 md:h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
-          </div>
+          <FriendsScatterSkeleton />
         ) : friends.length ? (
           friends.map((friend, i) => {
             const pos = positions[i];

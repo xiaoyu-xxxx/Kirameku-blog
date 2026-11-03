@@ -11,8 +11,8 @@ export interface FriendLinkItem {
   created_at: string;
 }
 
-export function getFriendLinks() {
-  return request<FriendLinkItem[]>("/api/friend-links");
+export function getFriendLinks(init?: RequestInit) {
+  return request<FriendLinkItem[]>("/api/friend-links", init);
 }
 
 export type FriendLinkApplyPayload = {

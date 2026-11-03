@@ -29,8 +29,8 @@ export function getPosts(params?: {
   tag?: string;
   page?: number;
   size?: number;
-}) {
-  return request<PostItem[]>(`/api/posts${qs(params)}`);
+}, init?: RequestInit) {
+  return request<PostItem[]>(`/api/posts${qs(params)}`, init);
 }
 
 export function getPostsCount(status?: string) {
@@ -39,8 +39,8 @@ export function getPostsCount(status?: string) {
   );
 }
 
-export function getPostBySlug(slug: string) {
-  return request<PostDetail>(`/api/posts/${slug}`);
+export function getPostBySlug(slug: string, init?: RequestInit) {
+  return request<PostDetail>(`/api/posts/${slug}`, init);
 }
 
 export function getPostById(postId: number) {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Bookmark, ExternalLink } from "lucide-react";
+import { BookmarkGridSkeleton } from "@/components/ui/ContentSkeleton";
 import { getBookmarks } from "@/app/api";
 import type { BookmarkCategory, BookmarkSite } from "@/app/api";
 
@@ -22,10 +23,21 @@ export default function BookmarkPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getBookmarks()
-      .then(setData)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const ac = new AbortController();
+    getBookmarks({ signal: ac.signal })
+      .then((d) => {
+        if (ac.signal.aborted) return;
+        setData(d);
+      })
+      .catch((err: unknown) => {
+        if (ac.signal.aborted) return;
+        const name = err && typeof err === "object" && "name" in err ? String((err as { name: string }).name) : "";
+        if (name === "AbortError") return;
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setLoading(false);
+      });
+    return () => { ac.abort(); };
   }, []);
 
   return (
@@ -50,7 +62,7 @@ export default function BookmarkPage() {
 
       {/* Loading */}
       {loading ? (
-        <div className="text-center py-20 text-slate-400">加载中...</div>
+        <BookmarkGridSkeleton count={8} />
       ) : data.length === 0 ? (
         <div className="text-center py-20 text-slate-400">
           {data.length === 0 ? "暂无收藏" : "没有找到匹配的站点"}
