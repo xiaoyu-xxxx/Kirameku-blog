@@ -17,6 +17,7 @@ import {
 import { getGithubUser } from "@/app/api/messages";
 import type { GitHubUser } from "@/app/api/types";
 import { siteConfig } from "@/siteConfig";
+import { ListBlockSkeleton } from "@/components/ui/ContentSkeleton";
 
 interface Moment {
   id: string;
