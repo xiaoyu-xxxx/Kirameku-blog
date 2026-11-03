@@ -18,6 +18,10 @@ import SeasonalEffect from "@/components/ui/SeasonalEffect";
 import KiraSparkle from "@/components/ui/KiraSparkle";
 import WelcomeScreen from "@/components/layout/WelcomeScreen";
 import VisitorTracker from "@/components/layout/VisitorTracker";
+import {
+  fetchPublicSiteSettings,
+  siteSettingString,
+} from "@/lib/public-config";
 import { siteConfig } from "@/siteConfig";
 
 const geistSans = Geist({
@@ -36,15 +40,29 @@ const notoSerifSC = Noto_Serif_SC({
   weight: ["400", "700"],
 });
 
-export const metadata: Metadata = {
-  title: siteConfig.title,
-  description: siteConfig.bio,
-  alternates: {
-    types: {
-      "application/rss+xml": "/feed",
+export async function generateMetadata(): Promise<Metadata> {
+  const siteSettings = await fetchPublicSiteSettings();
+  const title = siteSettingString(
+    siteSettings,
+    "site_title",
+    siteConfig.title
+  );
+  const description = siteSettingString(
+    siteSettings,
+    "bio",
+    siteConfig.bio
+  );
+
+  return {
+    title,
+    description,
+    alternates: {
+      types: {
+        "application/rss+xml": "/feed",
+      },
     },
-  },
-};
+  };
+}
 
 export default function RootLayout({
   children,

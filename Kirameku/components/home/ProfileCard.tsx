@@ -1,3 +1,7 @@
+"use client";
+
+import { useAppConfig } from "@/components/providers/AppConfigProvider";
+import { siteSettingString } from "@/lib/public-config";
 import { siteConfig } from "@/siteConfig";
 
 export default function ProfileCard({
@@ -9,6 +13,24 @@ export default function ProfileCard({
   chatterCount?: number;
   photoCount?: number;
 }) {
+  const { siteSettings } = useAppConfig();
+  const authorName = siteSettingString(
+    siteSettings,
+    "author_name",
+    siteConfig.authorName
+  );
+  const bio = siteSettingString(siteSettings, "bio", siteConfig.bio);
+  const avatarUrl = siteSettingString(
+    siteSettings,
+    "avatar_url",
+    siteConfig.avatarUrl
+  );
+  const githubUrl = siteSettingString(
+    siteSettings,
+    "github",
+    siteConfig.social?.github ?? ""
+  );
+
   return (
     <div
       className="rounded-3xl bg-white/40 dark:bg-slate-800/50 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-xl p-5 md:p-8 flex flex-col justify-between transition-all duration-700 group relative overflow-hidden w-full h-full min-h-[200px] md:min-h-[280px]"
@@ -18,7 +40,7 @@ export default function ProfileCard({
           <div className="flex-shrink-0">
             <div className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-gradient-to-tr from-sky-400 via-indigo-400 to-purple-400 p-[3px] shadow-lg transition-all duration-500 hover:shadow-xl hover:scale-110 hover:rotate-6 cursor-pointer">
               <img
-                src={siteConfig.avatarUrl}
+                src={avatarUrl}
                 alt="avatar"
                 className="w-full h-full rounded-full object-cover bg-white dark:bg-slate-800"
               />
@@ -26,10 +48,10 @@ export default function ProfileCard({
           </div>
           <div>
             <h1 className="text-xl md:text-3xl font-bold text-slate-900 dark:text-white mb-1 md:mb-2 tracking-wider transition-colors duration-700">
-              {siteConfig.authorName}
+              {authorName}
             </h1>
             <p className="text-sm md:text-base text-slate-700 dark:text-slate-300 font-medium leading-relaxed max-w-md transition-colors duration-700">
-              {siteConfig.bio}
+              {bio}
             </p>
           </div>
         </div>
@@ -57,9 +79,7 @@ export default function ProfileCard({
         </div>
 
         <div className="flex gap-3 flex-wrap justify-end">
-          {siteConfig.social?.github && (
-            <SocialBtn type="github" url={siteConfig.social.github} />
-          )}
+          {githubUrl && <SocialBtn type="github" url={githubUrl} />}
           {siteConfig.social?.gitee && (
             <SocialBtn type="gitee" url={siteConfig.social.gitee} />
           )}
