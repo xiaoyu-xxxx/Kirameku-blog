@@ -29,8 +29,8 @@ export function getChatters(params?: {
   status?: string;
   page?: number;
   size?: number;
-}) {
-  return request<ChatterItem[]>(`/api/chatters${qs(params)}`);
+}, init?: RequestInit) {
+  return request<ChatterItem[]>(`/api/chatters${qs(params)}`, init);
 }
 
 export function getChattersCount(status?: string) {

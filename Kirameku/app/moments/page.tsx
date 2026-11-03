@@ -141,11 +141,11 @@ export default function MomentsPage() {
   }, [onlyViewId, commentsMap]);
 
   useEffect(() => {
-    let active = true;
+    const ac = new AbortController();
     async function load() {
       try {
-        const data = await getChatters({ status: "published", page: 1, size: 50 });
-        if (!active) return;
+        const data = await getChatters({ status: "published", page: 1, size: 50 }, { signal: ac.signal });
+        if (ac.signal.aborted) return;
         setMoments(data.map((item: ChatterItem) => ({
           id: String(item.id),
           content: item.content,
@@ -155,10 +155,16 @@ export default function MomentsPage() {
           comments_count: item.comments_count,
           created_at: item.created_at,
         })));
-      } finally { if (active) setLoading(false); }
+      } catch (err: unknown) {
+        if (ac.signal.aborted) return;
+        const name = err && typeof err === "object" && "name" in err ? String((err as { name: string }).name) : "";
+        if (name === "AbortError") return;
+      } finally {
+        if (!ac.signal.aborted) setLoading(false);
+      }
     }
     load();
-    return () => { active = false; };
+    return () => { ac.abort(); };
   }, []);
 
   const dayGroups = useMemo(() => {
@@ -265,9 +271,7 @@ export default function MomentsPage() {
           </div>
           <p className="text-sm md:text-base text-slate-600 dark:text-slate-300 ml-7 md:ml-10">记录生活中的小确幸</p>
         </motion.div>
-        <div className="space-y-3 md:space-y-6">
-          {[1, 2, 3].map((i) => <div key={i} className="h-20 md:h-24 rounded-2xl bg-white/40 dark:bg-slate-800/40 animate-pulse" />)}
-        </div>
+        <ListBlockSkeleton rows={4} />
       </div>
     );
   }

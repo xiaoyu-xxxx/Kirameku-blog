@@ -22,6 +22,6 @@ export interface BookmarkCategory {
   sites: BookmarkSite[];
 }
 
-export function getBookmarks() {
-  return request<BookmarkCategory[]>("/api/bookmarks");
+export function getBookmarks(init?: RequestInit) {
+  return request<BookmarkCategory[]>("/api/bookmarks", init);
 }

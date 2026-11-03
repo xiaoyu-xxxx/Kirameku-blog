@@ -21,14 +21,14 @@ export interface PhotoItem {
   created_at: string;
 }
 
-export function getAlbums() {
-  return request<AlbumItem[]>("/api/albums");
+export function getAlbums(init?: RequestInit) {
+  return request<AlbumItem[]>("/api/albums", init);
 }
 
 export function getAlbumById(albumId: number) {
   return request<AlbumItem>(`/api/albums/${albumId}`);
 }
 
-export function getAlbumPhotos(albumId: number) {
-  return request<PhotoItem[]>(`/api/albums/${albumId}/photos`);
+export function getAlbumPhotos(albumId: number, init?: RequestInit) {
+  return request<PhotoItem[]>(`/api/albums/${albumId}/photos`, init);
 }
