@@ -1,0 +1,31 @@
+NOTICE — Live2D model pack: 蓝色大肥鱼 / DSH Whale Girl (c_0120) FULL
+======================================================================
+
+This pack contains Live2D Cubism 4 model assets for personal/local admin import.
+
+Art provenance (Cubism assets: moc3, textures, physics, expressions, motions):
+  Primary art credit: 氵六青 (Bilibili @氵六青 / 11272072)
+  Also credited in upstream web demo lineage: 上善无形 / ZipZipPipe / 氵六青
+  Upstream art sources referenced:
+    - https://github.com/Andersen216/dsh-whale-girl-live2d  (assets/model)
+    - https://github.com/bearman141/ds-whale-pet           (app/model packaging)
+
+Artwork license (Andersen demo lineage): CC BY-NC-SA 4.0
+  Attribution — NonCommercial — ShareAlike
+  https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+IMPORTANT:
+  - Repository CODE around these demos may be MIT; the ARTWORK is NOT MIT.
+  - Non-commercial use unless you obtain separate permission from rights holders.
+  - ShareAlike applies to derivatives of the art. Keep this NOTICE on redistribute.
+  - ds-whale-pet LICENSE-MODEL also records the author's share terms
+    (e.g. 商用直播 / 自印物料 notes). Prefer the stricter reading when unsure;
+    do not sell the model as a standalone asset.
+
+Packaging (this FULL zip):
+  model3.json Expressions list + motion group names + Meta.Loop fixes come from
+  bearman141/ds-whale-pet (tools/make-model3.js). Binary Cubism assets match the
+  Andersen/ds-whale-pet shared moc3/textures (same hashes).
+
+Pack assembled for Kirameku Live2D admin skin import (Cubism 4).
+Entry: c_0120.model3.json
