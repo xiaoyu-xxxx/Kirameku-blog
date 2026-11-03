@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { message } from "@/utils/message";
 import {
   getFriendLinks,
@@ -13,9 +13,25 @@ import { useRenderIcon } from "@/components/ReIcon/src/hooks";
 
 defineOptions({ name: "FriendLinkIndex" });
 
-// ========== 列表 ==========
+type StatusFilter = "all" | "pending" | "approved";
+
 const loading = ref(false);
 const dataList = ref<FriendLinkItem[]>([]);
+const statusFilter = ref<StatusFilter>("all");
+
+const pendingCount = computed(
+  () => dataList.value.filter(r => !r.is_approved).length
+);
+
+const filteredList = computed(() => {
+  if (statusFilter.value === "pending") {
+    return dataList.value.filter(r => !r.is_approved);
+  }
+  if (statusFilter.value === "approved") {
+    return dataList.value.filter(r => r.is_approved);
+  }
+  return dataList.value;
+});
 
 const columns: TableColumnList = [
   { label: "ID", prop: "id", width: 70 },
@@ -73,7 +89,6 @@ async function onSearch() {
   }
 }
 
-// ========== 新增/编辑 ==========
 const dialogVisible = ref(false);
 const dialogTitle = ref("新增友链");
 const formRef = ref();
@@ -164,7 +179,6 @@ async function handleToggleApproved(row: FriendLinkItem) {
   }
 }
 
-// ========== 头像上传 ==========
 const uploading = ref(false);
 
 function compressImage(file: File): Promise<File> {
@@ -226,8 +240,23 @@ onMounted(() => onSearch());
   <div class="p-4">
     <el-card shadow="never">
       <template #header>
-        <div class="flex justify-between items-center">
-          <span class="font-medium">友链管理</span>
+        <div class="flex justify-between items-center flex-wrap gap-3">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="font-medium">友链管理</span>
+            <el-radio-group v-model="statusFilter" size="small">
+              <el-radio-button label="all">全部</el-radio-button>
+              <el-radio-button label="pending">
+                待审核
+                <el-badge
+                  v-if="pendingCount > 0"
+                  :value="pendingCount"
+                  class="ml-1"
+                  type="warning"
+                />
+              </el-radio-button>
+              <el-radio-button label="approved">已通过</el-radio-button>
+            </el-radio-group>
+          </div>
           <el-button
             type="primary"
             :icon="useRenderIcon('ri:add-circle-line')"
@@ -239,12 +268,15 @@ onMounted(() => onSearch());
       </template>
 
       <pure-table
-        :data="dataList"
+        :data="filteredList"
         :columns="columns"
         :loading="loading"
         align-whole="center"
         row-key="id"
         table-layout="auto"
+        :row-class-name="
+          ({ row }) => (!row.is_approved ? 'friend-link-pending-row' : '')
+        "
       >
         <template #avatar="{ row }">
           <el-image
@@ -295,7 +327,6 @@ onMounted(() => onSearch());
       </pure-table>
     </el-card>
 
-    <!-- 新增/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
@@ -363,7 +394,11 @@ onMounted(() => onSearch());
           <el-input-number v-model="form.sort" :min="0" :max="9999" />
         </el-form-item>
         <el-form-item label="审核">
-          <el-switch v-model="form.is_approved" active-text="通过" inactive-text="待审核" />
+          <el-switch
+            v-model="form.is_approved"
+            active-text="通过"
+            inactive-text="待审核"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -373,3 +408,12 @@ onMounted(() => onSearch());
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+:deep(.friend-link-pending-row) {
+  --el-table-tr-bg-color: rgba(14, 165, 233, 0.06);
+}
+:deep(.friend-link-pending-row td:first-child) {
+  box-shadow: inset 3px 0 0 #0ea5e9;
+}
+</style>

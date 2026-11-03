@@ -24,6 +24,7 @@ export const createFriendLink = (data: {
   avatar?: string;
   description?: string;
   sort?: number;
+  is_approved?: boolean;
 }) => {
   return http.request<FriendLinkItem>("post", "/api/friend-links", { data });
 };
