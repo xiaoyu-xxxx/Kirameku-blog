@@ -17,7 +17,7 @@ from app.schemas.chatter import (
 )
 from app.schemas.album import AlbumCreate, AlbumUpdate, AlbumOut, PhotoCreate, PhotoOut
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectOut
-from app.schemas.friend_link import FriendLinkCreate, FriendLinkUpdate, FriendLinkOut
+from app.schemas.friend_link import FriendLinkCreate, FriendLinkApply, FriendLinkUpdate, FriendLinkOut
 from app.schemas.site_config import SiteConfigUpdate, SiteConfigOut
 from app.schemas.bookmark import (
     BookmarkCategoryCreate, BookmarkCategoryUpdate, BookmarkCategoryOut,
@@ -54,7 +54,7 @@ __all__ = [
     "AlbumCreate", "AlbumUpdate", "AlbumOut",
     "PhotoCreate", "PhotoOut",
     "ProjectCreate", "ProjectUpdate", "ProjectOut",
-    "FriendLinkCreate", "FriendLinkUpdate", "FriendLinkOut",
+    "FriendLinkCreate", "FriendLinkApply", "FriendLinkUpdate", "FriendLinkOut",
     "SiteConfigUpdate", "SiteConfigOut",
     "BookmarkCategoryCreate", "BookmarkCategoryUpdate", "BookmarkCategoryOut",
     "BookmarkSiteCreate", "BookmarkSiteUpdate", "BookmarkSiteOut", "BookmarkFull",
