@@ -23,8 +23,8 @@ def create_friend_link(session: Session, data: FriendLinkCreate) -> FriendLink:
     return fl
 
 
-def apply_friend_link(session: Session, data: FriendLinkApply) -> FriendLink | None:
-    """公开申请。蜜罐命中返回 None（调用方假成功）；否则强制未审核入库。"""
+def apply_friend_link(session: Session, data: FriendLinkApply) -> FriendLink:
+    """公开申请：强制未审核入库。蜜罐假成功由 API 层处理。"""
     # 同 url 已有待审 → 409
     pending = session.exec(
         select(FriendLink).where(
