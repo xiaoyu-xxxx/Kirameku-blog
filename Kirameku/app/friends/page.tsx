@@ -191,7 +191,7 @@ export default function FriendsPage() {
   };
 
   const fieldClass =
-    "w-full rounded-xl border border-white/40 dark:border-white/10 bg-white/55 dark:bg-slate-900/40 px-3 py-2.5 text-[13px] text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/40";
+    "glass-input w-full text-[13px] text-slate-800 dark:text-slate-100 placeholder:text-slate-400";
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12">
@@ -351,7 +351,7 @@ export default function FriendsPage() {
         )}
       </AnimatePresence>
 
-      {/* 申请弹层：token 对齐详情弹窗 §2.4 */}
+      {/* 申请弹层：v1.3 · max-w-md + glass-card/button/input · 详情瓶卡不动 */}
       <AnimatePresence>
         {applyOpen && (
           <motion.div
@@ -368,7 +368,7 @@ export default function FriendsPage() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ duration: 0.3, ease: "easeOut" }}
-              className="relative w-full max-w-xs rounded-2xl md:rounded-3xl bg-white/70 dark:bg-slate-800/80 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-2xl p-5 md:p-8"
+              className="relative w-full max-w-md glass-card shadow-2xl rounded-2xl md:rounded-3xl bg-white/55 dark:bg-slate-800/60 p-5 md:p-8"
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -393,13 +393,15 @@ export default function FriendsPage() {
                   <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4 md:mb-6">
                     等待审核；通过后会出现在友链海面。
                   </p>
-                  <button
-                    type="button"
-                    onClick={closeApply}
-                    className="inline-flex items-center justify-center rounded-full bg-sky-500 hover:bg-sky-600 text-white text-xs md:text-sm font-medium px-4 py-2 md:px-6 md:py-2.5 shadow-lg shadow-sky-500/20 transition-colors"
-                  >
-                    好的
-                  </button>
+                  <div className="mt-4 md:mt-6 flex flex-wrap justify-end items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={closeApply}
+                      className="inline-flex items-center justify-center rounded-full bg-sky-500 hover:bg-sky-600 text-white text-xs md:text-sm font-semibold min-w-[6.5rem] px-5 py-2 md:px-6 md:py-2.5 shadow-lg shadow-sky-500/20 transition-colors"
+                    >
+                      好的
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -508,21 +510,21 @@ export default function FriendsPage() {
                     建议互链本站；头像请使用可公网访问的图片 URL。
                   </p>
 
-                  <div className="mt-4 md:mt-6 flex flex-col items-center gap-2">
+                  <div className="mt-4 md:mt-6 flex flex-wrap justify-end items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={closeApply}
+                      className="glass-button px-4 py-2 md:px-5 md:py-2.5 text-xs md:text-sm font-medium text-slate-600 dark:text-slate-300"
+                    >
+                      取消
+                    </button>
                     <button
                       type="button"
                       disabled={applySubmitting}
                       onClick={submitApply}
-                      className="inline-flex items-center justify-center rounded-full bg-sky-500 hover:bg-sky-600 disabled:opacity-60 text-white text-xs md:text-sm font-medium px-4 py-2 md:px-6 md:py-2.5 shadow-lg shadow-sky-500/20 transition-colors"
+                      className="inline-flex items-center justify-center rounded-full bg-sky-500 hover:bg-sky-600 disabled:opacity-60 text-white text-xs md:text-sm font-semibold min-w-[6.5rem] px-5 py-2 md:px-6 md:py-2.5 shadow-lg shadow-sky-500/20 transition-colors"
                     >
                       {applySubmitting ? "投递中…" : "投递"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={closeApply}
-                      className="text-slate-400 text-xs font-medium hover:text-slate-500 transition-colors"
-                    >
-                      取消
                     </button>
                   </div>
                 </>

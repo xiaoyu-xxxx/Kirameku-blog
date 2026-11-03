@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>友链申请入口 · 线框 mock</title>
+  <title>友链申请入口 · 线框 mock v1.3</title>
   <style>
     :root {
       /* aligned to app/friends/page.tsx detail modal */
@@ -26,7 +26,7 @@
       --radius-field: 0.75rem;   /* rounded-xl */
       --space-card: 1.25rem;     /* p-5 */
       --space-card-md: 2rem;     /* p-8 */
-      --max-modal: 20rem;        /* max-w-xs */
+      --max-modal: 28rem;        /* max-w-md · 表单弹层对齐 DogDiary glass-card */
       --blur-card: 40px;         /* backdrop-blur-2xl ≈ */
       --blur-scrim: 4px;         /* backdrop-blur-sm */
       --bg1: #e0f2fe;
@@ -282,9 +282,10 @@
     .actions {
       margin-top: 1.25rem; /* mt-5 */
       display: flex;
-      justify-content: center;
+      justify-content: flex-end;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.5rem;
+      flex-wrap: wrap;
     }
     .btn-primary {
       appearance: none;
@@ -293,8 +294,9 @@
       background: var(--sky);
       color: #fff;
       font-size: 0.75rem; /* text-xs */
-      font-weight: 500;
-      padding: 0.5rem 1rem; /* py-2 px-4 */
+      font-weight: 600;
+      min-width: 6.5rem;
+      padding: 0.5rem 1.25rem; /* py-2 px-5 */
       cursor: pointer;
       box-shadow: 0 10px 15px -3px var(--sky-shadow);
       transition: background .15s, transform .1s;
@@ -308,16 +310,26 @@
     }
     .btn-ghost {
       appearance: none;
-      border: 0;
-      background: transparent;
-      color: var(--muted-soft);
+      border: 1px solid rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.30);
+      backdrop-filter: blur(8px);
+      color: #64748b;
       font-size: 0.75rem;
       font-weight: 500;
       cursor: pointer;
-      padding: 0.5rem 0.75rem;
-      transition: color .15s;
+      padding: 0.5rem 1rem;
+      border-radius: 0.75rem; /* rounded-xl · glass-button */
+      transition: background .15s, color .15s, transform .1s, box-shadow .15s;
     }
-    .btn-ghost:hover { color: #64748b; }
+    .btn-ghost:hover {
+      background: rgba(255,255,255,0.50);
+      color: #475569;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    @media (min-width: 768px) {
+      .btn-ghost { font-size: 0.875rem; padding: 0.625rem 1.25rem; }
+    }
     .success {
       display: none;
       text-align: center;
@@ -383,7 +395,7 @@
     <p class="tip">点击漂流瓶查看朋友详情 · 欢迎交换友链</p>
 
     <div class="note">
-      <strong>设计要点：</strong>唯一入口页头幽灵胶囊；弹层 token 对齐现网详情弹窗（max-w-xs / rounded-2xl→3xl / white/70 / blur-2xl / sky-500 CTA）；
+      <strong>设计要点：</strong>唯一入口页头幽灵胶囊；表单弹层对齐博客主体：max-w-md + glass-card 语汇；取消用 glass-button；投递仍为 sky-500 胶囊（与评论/详情 CTA 同族）；详情瓶卡仍保持 max-w-xs；
       投递 <code>POST /api/friend-links/apply</code>（强制待审）。详见 <code>friends-link-apply.md</code> §2.4。
     </div>
   </div>

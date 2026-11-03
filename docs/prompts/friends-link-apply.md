@@ -1,10 +1,10 @@
 # 友链申请 · 博客入口 + 管理端审核（v1）
 
-**状态：** handoff-ready v1.2（仅页头申请按钮；弹层 token 对齐现网详情弹窗；交「博客前端重构」落地）  
+**状态：** handoff-ready v1.3（申请弹层加宽 + 按钮对齐博客主体 glass；**仅改前端样式**，API/管理端已合入）  
 **日期：** 2026-11-03（Asia/Shanghai）  
 **线上页：** https://blog.xiaoyu-hh.cn/friends  
-**线框：** `/workspace/friends-apply/friends-apply-mock.html`  
-**范围：** 博客 `/friends` 申请入口 + 公开申请 API + 管理端审核轻量强化；**Cloud Agent OFF**；不合 main / 不部署，待确认。  
+**线框：** `/workspace/friends-apply/friends-apply-mock.html`（v1.3）  
+**范围：** `/friends` 申请弹层视觉修订；**Cloud Agent OFF**；不合 main / 不部署，待确认。  
 **不做：** R2；Demo；改漂流瓶散落算法；公开端头像文件上传（仅 URL）。
 
 ---
@@ -77,31 +77,32 @@
 | 标题 | 「投放一只漂流瓶」 |
 | 副文 | 「填写后进入审核；通过后会出现在友链海面。」 |
 | 字段 | 见 §3；表单区 `text-left`，标题/副文/按钮区仍居中 |
-| 主按钮 | 与详情「访问主页」同款「投递」 |
-| 次按钮 | 文字「取消」+ 右上角 X（同详情关闭钮） |
+| 主按钮 | sky-500 胶囊「投递」（与评论提交 / 详情「访问主页」同族） |
+| 次按钮 | **glass-button**「取消」+ 右上角 X；底栏 `flex justify-end gap-2`（取消在左、投递在右） |
 | 成功态 | 同卡内替换：渐变圆标 + 短句 +「好的」；**不**整页跳转 |
 | 错误态 | 卡内红字或 toast（若项目已有 `ToastProvider` 可复用） |
 
-### 2.4 弹层 / 入口 Token（对照 `app/friends/page.tsx` 详情弹窗，必须对齐）
+### 2.4 弹层 / 入口 Token（v1.3 · 申请表单对齐博客主体；详情瓶卡不变）
 
-| Token | 值（Tailwind / 实现） |
-|---|---|
-| Scrim | `bg-black/40 backdrop-blur-sm` |
-| 卡片宽 | `w-full max-w-xs`（**不是** max-w-sm） |
-| 卡片圆角 | `rounded-2xl md:rounded-3xl` |
-| 卡片面 | `bg-white/70 dark:bg-slate-800/80 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-2xl` |
-| 卡片内边距 | `p-5 md:p-8` |
-| 关闭钮 | `absolute top-3 right-3 md:top-4 md:right-4 w-6 h-6 md:w-7 md:h-7 rounded-full bg-white/50 dark:bg-slate-700/50 text-slate-400` |
-| 标题 | `text-base md:text-lg font-bold text-slate-800 dark:text-white mb-1.5 md:mb-2` |
-| 副文 | `text-xs md:text-sm text-slate-500 dark:text-slate-400 leading-relaxed mb-4 md:mb-6` |
-| 主 CTA | `rounded-full bg-sky-500 hover:bg-sky-600 text-white text-xs md:text-sm font-medium px-4 py-2 md:px-6 md:py-2.5 shadow-lg shadow-sky-500/20` |
-| 次按钮 | 透明文字 `text-slate-400 text-xs font-medium` |
-| 字段 label | `text-[11px] font-semibold tracking-wide text-slate-500`；必填 `*` 用 `text-sky-500` |
-| 字段控件 | `rounded-xl border border-white/40 dark:border-white/10 bg-white/55 dark:bg-slate-900/40 px-3 py-2.5 text-[13px]`；focus `ring` sky 淡圈 |
-| 脚注 | `text-[10px] text-slate-400` |
-| 页头入口胶囊 | 对齐瓶子名条：`rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border border-white/40 dark:border-white/10 px-2 py-0.5 md:px-3 md:py-1 text-[10px] md:text-xs font-bold text-sky-700/90 dark:text-sky-300` |
+**原则：** 漂流瓶**详情**弹窗继续 `max-w-xs` 肖像卡；**申请表单**改走博客主体表单弹层（对照 `DogDiary`：`max-w-md glass-card`）+ 全局 `glass-button` / `glass-input`。
 
-暗色模式：卡片 / 边框 / 关闭钮 / 输入底 **必须**带上表 `dark:`，与详情弹窗同族，禁止另起一套灰阶。
+| Token | 申请弹层（本轮改） | 详情弹窗（保持） |
+|---|---|---|
+| Scrim | `bg-black/40 backdrop-blur-sm` | 同左 |
+| 卡片宽 | **`w-full max-w-md`**（28rem；**不要**再锁 `max-w-xs`） | `max-w-xs` |
+| 卡片面 | 优先 **`glass-card`** + `shadow-2xl`；若需更亮可读可叠加 `bg-white/55 dark:bg-slate-800/60`，圆角可用 `rounded-2xl`（glass-card 默认 16px）或保留 `rounded-2xl md:rounded-3xl` | 现网 `white/70` + `blur-2xl` + `rounded-2xl md:rounded-3xl` |
+| 内边距 | `p-5 md:p-8` | 同左 |
+| 关闭钮 | 可与详情同，或 DogDiary 式 `p-1.5 rounded-lg hover:bg-white/50` | 现网圆钮 |
+| 标题 / 副文 | 保持现网字号色阶 | 同左 |
+| 字段控件 | 优先 **`glass-input`**（或等价：`rounded-xl` + 白/30 毛玻璃边）；focus 可用 sky 淡圈以贴友链主色 | — |
+| 底栏 | `mt-4 md:mt-6 flex flex-wrap justify-end items-center gap-2` | — |
+| 次 CTA「取消」 | **`glass-button`** + `px-4 py-2 md:px-5 md:py-2.5 text-xs md:text-sm font-medium text-slate-600 dark:text-slate-300`（**禁止**再做成纯文字链） | — |
+| 主 CTA「投递」/成功「好的」 | `rounded-full bg-sky-500 hover:bg-sky-600 text-white text-xs md:text-sm font-semibold min-w-[6.5rem] px-5 py-2 md:px-6 md:py-2.5 shadow-lg shadow-sky-500/20` | 详情「访问主页」保持现网胶囊 |
+| 页头入口胶囊 | 不变 | — |
+
+暗色：`glass-card` / `glass-button` / `glass-input` 自带 `.dark`；若手写 Tailwind 须带 `dark:`。
+
+**禁止：** 申请弹层继续 `max-w-xs`；取消钮继续纯文字；主 CTA 改成粉/靛等非 sky；改散落区。
 
 ### 2.3 不做
 
@@ -256,3 +257,8 @@ export function applyFriendLink(data: {
 1. ~~用户确认~~ → v1.2 已定：仅页头「申请友链」+ §2.4 token；邮箱 v1 不收。  
 2. **交 博客前端重构**：本地分支 + PR open；Cloud Agent OFF；不合 main / 不部署。  
 3. 设计师按 §7 + §6 验收后再谈合入。
+
+## Changelog
+
+- **v1.3（2026-11-03）**：申请弹层 `max-w-md` + `glass-card`/`glass-button`/`glass-input`；底栏右对齐；详情瓶卡宽度不变。API/管理端不在本轮范围。
+- **v1.2**：仅页头入口；弹层曾对齐详情 `max-w-xs`。
