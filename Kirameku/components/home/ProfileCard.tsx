@@ -25,6 +25,11 @@ export default function ProfileCard({
     "avatar_url",
     siteConfig.avatarUrl
   );
+  const githubUrl = siteSettingString(
+    siteSettings,
+    "github",
+    siteConfig.social?.github ?? ""
+  );
 
   return (
     <div
@@ -74,9 +79,7 @@ export default function ProfileCard({
         </div>
 
         <div className="flex gap-3 flex-wrap justify-end">
-          {siteConfig.social?.github && (
-            <SocialBtn type="github" url={siteConfig.social.github} />
-          )}
+          {githubUrl && <SocialBtn type="github" url={githubUrl} />}
           {siteConfig.social?.gitee && (
             <SocialBtn type="gitee" url={siteConfig.social.gitee} />
           )}
