@@ -118,11 +118,18 @@ jobs:
             "$REMOTE_ROOT"
           # Sync public as a directory; --delete scoped to public/ only
           # Preserve server-side live2d capture cache (not in CI public tree)
+          # Protect live2d/model from --delete; follow-up rsync ships git models without wiping server-only uploads.
           rsync -avzr --delete \
             -e "$RSYNC_RSH" \
             --exclude 'live2d/previews/' \
+            --exclude 'live2d/model/' \
             public \
             "$REMOTE_ROOT"
+          # Overlay/update models from git; no --delete => keep server-only slugs (e.g. future uploads)
+          rsync -avzr \
+            -e "$RSYNC_RSH" \
+            public/live2d/model/ \
+            "${SSH_USER}@${SSH_HOST}:${REMOTE_FRONTEND}/public/live2d/model/"
           # Root package files without --delete (must not wipe node_modules or other server-side root files)
           rsync -avzr \
             -e "$RSYNC_RSH" \

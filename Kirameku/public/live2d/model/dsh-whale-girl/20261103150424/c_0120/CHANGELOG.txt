@@ -1,0 +1,16 @@
+CHANGELOG — dsh-whale-girl-full / c_0120
+=======================================
+
+2026-11-03  FULL packaging (vs earlier dsh-whale-girl-c_0120.zip)
+  - Sourced packaging from https://github.com/bearman141/ds-whale-pet (app/model)
+  - Art binaries same Cubism4 set as Andersen216/dsh-whale-girl-live2d
+  - c_0120.model3.json now declares full Expressions list (44) — previous
+    Andersen model3 only listed Motions, so runtime/admin could not enumerate
+    expression/toggle "skins" from model3 alone
+  - Expression files remain flat next to model3 (love.exp3.json etc.), matching
+    paths declared in the pet model3.json (NOT expressions/ subfolder)
+  - Motion Meta.Loop adjusted for pixi-live2d-display: idle=true; all other
+    motions false (prevents stuck priority / endless first motion)
+  - Motion groups use pet Chinese names (Idle/喷水/开盖/番茄酱/自拍/自拍简单/
+    吹泡泡/重锤出击); aidale lives at skin root as aidale.motion3.json
+  - Added NOTICE.txt (CC BY-NC-SA + credits) and this CHANGELOG.txt
