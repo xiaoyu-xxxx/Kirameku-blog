@@ -389,12 +389,36 @@ function installStageDrag(oml2d: Oml2dApi, dragState?: StageDragState): () => vo
     return { left: r.left, top: r.top };
   };
 
+  /**
+   * 撤掉进场动画前，先把舞台「现在的位置」固化到内联 transform 上。
+   *
+   * OML2D 的舞台基础内联样式带 `transform: translateY(130%)`（藏在屏幕下方），
+   * 进场靠 `animation: oml2d-stage-slide-in` + `animation-fill-mode: forwards` 停在
+   * `translateY(0%)`。一旦把 animation 置成 none，forwards 的填充立刻失效，transform
+   * 回落到基础样式的 `translateY(130%)` —— 表现就是「在模型上按一下鼠标，整个看板娘
+   * 掉出视口」。只有本地存过 waifu-pos（left/top + transform:none）的用户看不到这点。
+   */
+  const pinStageTransform = () => {
+    const animations = typeof stage.getAnimations === "function" ? stage.getAnimations() : [];
+    const slidingIn = animations.some((animation) =>
+      ((animation as CSSAnimation).animationName || "").startsWith("oml2d-stage-slide-in"),
+    );
+    if (slidingIn) {
+      // 进场动画还没跑完：固定到动画终态，别把中途位置冻住。
+      stage.style.transform = "translateY(0%)";
+      return;
+    }
+    const computed = window.getComputedStyle(stage).transform;
+    stage.style.transform = computed && computed !== "none" ? computed : "none";
+  };
+
   const onStart = (e: MouseEvent | TouchEvent) => {
     const target = e.target;
     if (!(target instanceof Element)) return;
     if (target.closest("#oml2d-menus")) return;
     e.preventDefault();
     dragging = true;
+    pinStageTransform();
     stage.style.transition = "none";
     stage.style.animation = "none";
     const ev = "touches" in e ? e.touches[0] : e;
