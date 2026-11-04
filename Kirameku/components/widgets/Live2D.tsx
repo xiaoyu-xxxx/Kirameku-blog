@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Script from "next/script";
-import { installHitAreaTap, type StageDragState } from "./live2dHitAreaTap";
+import { installHitAreaTap, type HitState, type StageDragState } from "./live2dHitAreaTap";
 
 /**
  * 看板娘引擎：OhMyLive2D（默认）或旧 waifu/autoload（回退）。
@@ -609,7 +609,7 @@ function legacyGreeting(data: TipsData | null): string {
   return locationStr ? `欢迎来自 <span>${locationStr}</span> 的朋友～<br>${title}` : title;
 }
 
-function bindLegacyTips(oml2d: Oml2dApi, data: TipsData | null): () => void {
+function bindLegacyTips(oml2d: Oml2dApi, data: TipsData | null, hitState?: HitState): () => void {
   let hovered: Element | null = null;
   const match = (event: Event, rules: TipRule[] | undefined) => {
     const target = event.target;
@@ -629,7 +629,15 @@ function bindLegacyTips(oml2d: Oml2dApi, data: TipsData | null): () => void {
   };
 
   const onOver = (event: Event) => match(event, data?.mouseover);
-  const onClick = (event: Event) => match(event, data?.click);
+  const onClick = (event: Event) => {
+    // 本次点击已命中 HitArea：命中路径自己会出动作/表情，也可能出短句（优先级 9）。
+    // 这条老规则固定用优先级 8、时长 4000ms，一旦它先开口，短句就会被整个挡住。
+    if (hitState?.fired) {
+      hitState.fired = false;
+      return;
+    }
+    match(event, data?.click);
+  };
   const onVis = () => {
     if (!document.hidden && data?.message?.visibilitychange) {
       oml2d.tipsMessage(data.message.visibilitychange, 6000, 9);
@@ -901,9 +909,10 @@ export default function Live2D() {
       installMenuHoverFix(instance);
       installWaifuPositionPersistence(instance);
       const dragState: StageDragState = { moved: false };
+      const hitState: HitState = { fired: false };
       unbindDrag = installStageDrag(instance, dragState);
-      unbindHitTap = installHitAreaTap(instance, dragState);
-      unbindTips = bindLegacyTips(instance, tipsData);
+      unbindHitTap = installHitAreaTap(instance, dragState, hitState);
+      unbindTips = bindLegacyTips(instance, tipsData, hitState);
     })().catch((err) => {
       console.error("[Live2D] OhMyLive2D 初始化失败：", err);
     });

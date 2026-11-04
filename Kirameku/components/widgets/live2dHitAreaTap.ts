@@ -69,6 +69,12 @@ type Oml2dApiLike = {
 /** 与 installStageDrag 共享：拖拽移位后不点触。 */
 export type StageDragState = { moved: boolean };
 
+/**
+ * 与 bindLegacyTips 共享：本次点击是否已经命中 HitArea。
+ * 命中时老 waifu 点击台词要让位，否则它会用优先级 8 把短句盖掉。
+ */
+export type HitState = { fired: boolean };
+
 const HEAD_MOTION_POOL = [
   "自拍简单",
   "吹泡泡",
@@ -214,10 +220,11 @@ function tryRandomExpression(model: Live2DModelLike | undefined): void {
 
 function maybeHitTip(oml2d: Oml2dApiLike): void {
   try {
-    // 弱提示，优先级低于拖拽 tips（8）；约半数触发以免刷屏
+    // 优先级 9：能盖住老 waifu 点击台词（8），但抢不过开场问候（11/12）。
+    // 开场那 7 秒点模型没有台词，动作与表情照出。约半数触发以免刷屏。
     if (Math.random() > 0.45) return;
     const tip = pickOne([...HIT_TIPS]);
-    if (tip) oml2d.tipsMessage(tip, 1600, 3);
+    if (tip) oml2d.tipsMessage(tip, 1600, 9);
   } catch {
     // 静默
   }
@@ -227,7 +234,11 @@ function maybeHitTip(oml2d: Oml2dApiLike): void {
  * 安装 HitArea 点触门闩。未满足生效条件时不改引擎行为。
  * 返回卸载函数。
  */
-export function installHitAreaTap(oml2d: Oml2dApiLike, dragState: StageDragState): () => void {
+export function installHitAreaTap(
+  oml2d: Oml2dApiLike,
+  dragState: StageDragState,
+  hitState?: HitState,
+): () => void {
   const models = oml2d.models;
   if (!models) return () => {};
 
@@ -249,6 +260,7 @@ export function installHitAreaTap(oml2d: Oml2dApiLike, dragState: StageDragState
       const group = pickMappedMotion(areas || [], groups);
       if (group) models.playMotion(group);
       tryRandomExpression(model);
+      if (hitState) hitState.fired = true;
       maybeHitTip(oml2d);
     } catch {
       // 静默
@@ -281,6 +293,7 @@ export function installHitAreaTap(oml2d: Oml2dApiLike, dragState: StageDragState
       hitHandler = () => {
         if (dragState.moved) return;
         tryRandomExpression(models.model);
+        if (hitState) hitState.fired = true;
         maybeHitTip(oml2d);
       };
       model.on("hit", hitHandler);
