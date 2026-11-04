@@ -221,8 +221,9 @@ function tryRandomExpression(model: Live2DModelLike | undefined): void {
 function maybeHitTip(oml2d: Oml2dApiLike): void {
   try {
     // 优先级 9：能盖住老 waifu 点击台词（8），但抢不过开场问候（11/12）。
-    // 开场那 7 秒点模型没有台词，动作与表情照出。约半数触发以免刷屏。
-    if (Math.random() > 0.45) return;
+    // 开场那 7 秒点模型没有台词，动作与表情照出。
+    // 命中时老长句已让位，这里是唯一的台词来源，所以每次命中都发；
+    // 1600ms 很短，连点只会换一句，不会刷屏。
     const tip = pickOne([...HIT_TIPS]);
     if (tip) oml2d.tipsMessage(tip, 1600, 9);
   } catch {
