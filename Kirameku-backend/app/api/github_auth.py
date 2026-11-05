@@ -115,6 +115,7 @@ def get_me(
         "login": user.login,
         "avatar": user.avatar,
         "bio": user.bio,
+        "is_banned": bool(getattr(user, "is_banned", False)),
     }
 
 

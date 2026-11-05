@@ -3,6 +3,7 @@ from fastapi import HTTPException
 
 from app.models import Message, GitHubUser
 from app.schemas import MessageCreate
+from app.services.github_user_service import assert_not_banned
 
 
 def get_messages(
@@ -43,6 +44,7 @@ def create_message(
     """创建留言（需要 GitHub 登录）"""
     if not github_user:
         raise HTTPException(401, "请先登录 GitHub")
+    assert_not_banned(github_user)
 
     # 如果是回复，检查父留言是否存在
     if data.parent_id:

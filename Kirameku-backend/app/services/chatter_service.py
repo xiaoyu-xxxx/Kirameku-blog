@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from app.models import Chatter, ChatterComment, GitHubUser
 from app.schemas import ChatterCreate, ChatterUpdate, ChatterCommentCreate
+from app.services.github_user_service import assert_not_banned
 
 
 def _comment_to_dict(session: Session, c: ChatterComment, include_ip: bool = False, fetch_replies: bool = False) -> dict:
@@ -165,6 +166,7 @@ def create_chatter_comment(
 ) -> dict:
     if not github_user:
         raise HTTPException(401, "请先登录 GitHub")
+    assert_not_banned(github_user)
 
     if data.parent_id:
         parent = session.get(ChatterComment, data.parent_id)
