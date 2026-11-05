@@ -85,10 +85,14 @@ CREATE TABLE IF NOT EXISTS github_user (
     login         VARCHAR(100) NOT NULL,
     avatar        VARCHAR(500) DEFAULT '',
     bio           VARCHAR(500) DEFAULT '',
-    created_at    TIMESTAMP    DEFAULT NOW()
+    created_at    TIMESTAMP    DEFAULT NOW(),
+    is_banned     BOOLEAN      NOT NULL DEFAULT FALSE,
+    banned_at     TIMESTAMP    NULL,
+    ban_reason    VARCHAR(200) DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_github_user_id ON github_user(github_id);
+CREATE INDEX IF NOT EXISTS idx_github_user_banned ON github_user(is_banned);
 
 -- ============================================
 -- 7. Comment（文章评论 — GitHub 登录）
