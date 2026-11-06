@@ -7,8 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAppConfig } from "@/components/providers/AppConfigProvider";
 import { siteConfig } from "@/siteConfig";
-import { getGithubUser } from "@/app/api/messages";
-
 import SettingsPanel from "@/components/ui/SettingsPanel";
 import {
   Home,
@@ -55,33 +53,6 @@ export default function Navbar() {
   const settingsRef = useRef<HTMLDivElement>(null);
   const [easterEgg, setEasterEgg] = useState(false);
   const clickTimes = useRef<number[]>([]);
-  /** 简历门禁：以 /me 成功为准；被禁用户仍可看简历 */
-  const [canViewResume, setCanViewResume] = useState(false);
-
-  useEffect(() => {
-    const token = localStorage.getItem("github_token");
-    if (!token) {
-      setCanViewResume(false);
-      return;
-    }
-    let cancelled = false;
-    getGithubUser(token)
-      .then(() => {
-        if (!cancelled) setCanViewResume(true);
-      })
-      .catch(() => {
-        localStorage.removeItem("github_token");
-        localStorage.removeItem("github_user");
-        if (!cancelled) setCanViewResume(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [pathname]);
-
-  const visibleNavLinks = navLinks.filter(
-    (link) => link.href !== "/resume" || canViewResume
-  );
 
   const handleLogoClick = useCallback(() => {
     const now = Date.now();
@@ -246,7 +217,7 @@ export default function Navbar() {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-1">
-              {visibleNavLinks.map((link) => {
+              {navLinks.map((link) => {
                 const Icon = link.icon;
                 const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
                 return (
@@ -337,7 +308,7 @@ export default function Navbar() {
             className="fixed inset-x-0 top-16 z-40 glass-card rounded-none border-x-0 md:hidden"
           >
             <div className="p-4 space-y-1">
-              {visibleNavLinks.map((link) => {
+              {navLinks.map((link) => {
                 const Icon = link.icon;
                 const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
                 return (
