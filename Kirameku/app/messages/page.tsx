@@ -151,6 +151,7 @@ export default function MessagesPage() {
   }, []);
 
   function handleLogin() {
+    sessionStorage.setItem("github_redirect", "/messages");
     window.location.href = "/api/auth/github/login";
   }
 
@@ -161,7 +162,7 @@ export default function MessagesPage() {
   }
 
   async function handleSubmit() {
-    if (!inputValue.trim() || submitting) return;
+    if (!inputValue.trim() || submitting || user?.is_banned) return;
     setSubmitting(true);
     try {
       const newMsg = await createMessage({
@@ -331,13 +332,18 @@ export default function MessagesPage() {
       </motion.div>
 
 
-      {/* 输入框 */}
+      {/* 输入框 / 禁言提示 */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.15 }}
         className="mb-5 md:mb-10"
       >
+        {user?.is_banned ? (
+          <div className="rounded-2xl bg-red-50/80 dark:bg-red-950/40 backdrop-blur-xl border border-red-200/60 dark:border-red-800/50 px-4 py-3 md:px-5 md:py-4 text-xs md:text-sm text-red-600 dark:text-red-300">
+            账号已被禁用，无法发言
+          </div>
+        ) : (
         <div className="rounded-2xl bg-white/50 dark:bg-slate-800/60 backdrop-blur-xl border border-white/30 dark:border-white/10 overflow-hidden">
           {/* 回复提示 */}
           <AnimatePresence>
@@ -408,6 +414,7 @@ export default function MessagesPage() {
             </div>
           </div>
         </div>
+        )}
       </motion.div>
 
       {/* 空状态 */}

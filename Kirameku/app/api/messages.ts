@@ -40,13 +40,14 @@ export function likeMessage(msgId: number, unlike = false) {
   });
 }
 
-export function getGithubUser(token: string) {
-  return request<{ id: number; login: string; avatar: string; bio: string }>(
-    "/api/auth/github/me",
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    }
-  );
+export async function getGithubUser(token: string): Promise<GitHubUser> {
+  const u = await request<GitHubUser>("/api/auth/github/me", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return {
+    ...u,
+    is_banned: Boolean(u?.is_banned),
+  };
 }
 
 function getToken(): string {
