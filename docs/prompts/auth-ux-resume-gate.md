@@ -17,13 +17,17 @@
 4. **明确不做（本 PR）**：JWT 加 `exp`、OAuth `state`、token 改 cookie/fragment、点赞鉴权、发言改审核闸。可在 SoT「后续」一笔记一笔。
 
 ## 范围 B · 简历前台门禁
-1. **Navbar**：仅当存在有效 `github_token`（建议以 `/me` 成功为准；若 `is_banned` 仍可看简历——禁言≠禁看，除非你发现产品另有约定）才显示「简历」链接。
+1. **Navbar**：「简历」链接**始终显示**（与其他 navLinks 一致），不按登录态过滤。门禁只在 `/resume` 页（见下）。（产品澄清 2026-11-06：未登录隐藏菜单是错的。）
 2. **`/resume` 页**：无 token → 不渲染 `ResumeView` 正文；占位「请先使用 GitHub 登录后查看简历」+ 登录按钮；登录前写 `sessionStorage.github_redirect=/resume`。
 3. **有 token**：渲染现有 `ResumeView`（数据仍可来自 `resumeData.ts`，本档不迁 API）。
 4. **不做**：后端 `GET /api/resume`、把 `resumeData` 移出前端包、middleware 硬 404（token 在 localStorage，middleware 看不到）。
 
+
+## 热修补丁（2026-11-06）
+**Navbar 常显；门禁只在 `/resume`。** 去掉 `canViewResume` / 仅为显简历而做的 `/me` 请求与 `visibleNavLinks` 过滤。`ResumeGate` guest 门禁语义不变。
+
 ## 验收
-1. 未登录：导航无「简历」；直开 `/resume` 见占位 + 可登录并回跳。
+1. 未登录：导航**可见**「简历」；点进或直开 `/resume` 见占位 + 可登录并回跳。
 2. 登录后：导航有「简历」，页可看全文。
 3. 被禁用户：评论/留言/说说输入禁用且提示禁言；若强行调 API，前端展示「账号已被禁用，无法发言」。
 4. 正常用户发送失败时能看到后端 detail。
