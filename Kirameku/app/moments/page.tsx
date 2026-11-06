@@ -119,14 +119,17 @@ export default function MomentsPage() {
   });
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // 恢复 GitHub 登录状态
+  // 恢复 GitHub 登录状态（有 token 必拉 /me，以拿到 is_banned）
   useEffect(() => {
     const savedToken = localStorage.getItem("github_token");
-    if (savedToken && !user) {
-      getGithubUser(savedToken)
-        .then((u) => { setUser(u); localStorage.setItem("github_user", JSON.stringify(u)); })
-        .catch(() => { localStorage.removeItem("github_token"); localStorage.removeItem("github_user"); });
-    }
+    if (!savedToken) return;
+    getGithubUser(savedToken)
+      .then((u) => { setUser(u); localStorage.setItem("github_user", JSON.stringify(u)); })
+      .catch(() => {
+        localStorage.removeItem("github_token");
+        localStorage.removeItem("github_user");
+        setUser(null);
+      });
   }, []);
 
   // "只看这条" 时加载评论
@@ -245,7 +248,7 @@ export default function MomentsPage() {
   }
 
   async function handleSubmitComment(chatterId: number) {
-    if (!commentInput.trim() || submitting || !user) return;
+    if (!commentInput.trim() || submitting || !user || user.is_banned) return;
     setSubmitting(true);
     try {
       const nc = await createChatterComment({ chatter_id: chatterId, content: commentInput.trim(), parent_id: replyTo?.id });
@@ -259,7 +262,10 @@ export default function MomentsPage() {
       }
       setMoments((p) => p.map((m) => m.id === sid ? { ...m, comments_count: m.comments_count + 1 } : m));
       setCommentInput(""); setReplyTo(null);
-    } catch { alert("发送失败"); } finally { setSubmitting(false); }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "发送失败";
+      alert(msg);
+    } finally { setSubmitting(false); }
   }
 
   if (loading) {
@@ -405,7 +411,12 @@ export default function MomentsPage() {
                               </button>
                             )}
 
-                            {/* 输入框 */}
+                            {/* 输入框 / 禁言提示 */}
+                            {user?.is_banned ? (
+                              <div className="rounded-xl bg-red-50/80 dark:bg-red-950/40 border border-red-200/60 dark:border-red-800/50 px-3 py-2 mb-3 text-[10px] md:text-xs text-red-600 dark:text-red-300">
+                                账号已被禁用，无法发言
+                              </div>
+                            ) : (
                             <div className="rounded-xl bg-white/40 dark:bg-slate-700/30 overflow-hidden mb-3">
                               <AnimatePresence>
                                 {replyTo && (
@@ -434,6 +445,7 @@ export default function MomentsPage() {
                                 </div>
                               </div>
                             </div>
+                            )}
 
                             {commentsLoading[moment.id] && (
                               <div className="space-y-2">{[1, 2].map((i) => <div key={i} className="h-10 rounded-xl bg-white/30 dark:bg-slate-700/20 animate-pulse" />)}</div>

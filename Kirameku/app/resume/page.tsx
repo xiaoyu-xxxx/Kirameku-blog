@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { resumeMeta } from "./resumeData";
-import ResumeView from "./ResumeView";
+import ResumeGate from "./ResumeGate";
 
 export const metadata: Metadata = {
   title: resumeMeta.pageTitle,
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function ResumePage() {
-  return <ResumeView />;
+  return <ResumeGate />;
 }

@@ -79,19 +79,19 @@ export default function PostComments({ postId }: { postId: number }) {
 
   useEffect(() => {
     const savedToken = localStorage.getItem("github_token");
-    if (savedToken && !user) {
-      import("@/app/api/messages").then(({ getGithubUser }) => {
-        getGithubUser(savedToken)
-          .then((u) => {
-            setUser(u as unknown as GitHubUser);
-            localStorage.setItem("github_user", JSON.stringify(u));
-          })
-          .catch(() => {
-            localStorage.removeItem("github_token");
-            localStorage.removeItem("github_user");
-          });
-      });
-    }
+    if (!savedToken) return;
+    import("@/app/api/messages").then(({ getGithubUser }) => {
+      getGithubUser(savedToken)
+        .then((u) => {
+          setUser(u);
+          localStorage.setItem("github_user", JSON.stringify(u));
+        })
+        .catch(() => {
+          localStorage.removeItem("github_token");
+          localStorage.removeItem("github_user");
+          setUser(null);
+        });
+    });
   }, []);
 
   useEffect(() => {
@@ -122,7 +122,7 @@ export default function PostComments({ postId }: { postId: number }) {
   }
 
   async function handleSubmit() {
-    if (!inputValue.trim() || submitting) return;
+    if (!inputValue.trim() || submitting || user?.is_banned) return;
     setSubmitting(true);
     try {
       const newComment = await createComment({
@@ -276,13 +276,18 @@ export default function PostComments({ postId }: { postId: number }) {
         )}
       </motion.div>
 
-      {/* 输入框 */}
+      {/* 输入框 / 禁言提示 */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.1 }}
         className="mb-5 md:mb-8"
       >
+        {user?.is_banned ? (
+          <div className="rounded-2xl bg-red-50/80 dark:bg-red-950/40 backdrop-blur-xl border border-red-200/60 dark:border-red-800/50 px-4 py-3 md:px-5 md:py-4 text-xs md:text-sm text-red-600 dark:text-red-300">
+            账号已被禁用，无法发言
+          </div>
+        ) : (
         <div className="rounded-2xl bg-white/50 dark:bg-slate-800/60 backdrop-blur-xl border border-white/30 dark:border-white/10 overflow-hidden">
           <AnimatePresence>
             {replyTo && (
@@ -352,6 +357,7 @@ export default function PostComments({ postId }: { postId: number }) {
             </div>
           </div>
         </div>
+        )}
       </motion.div>
 
       {/* 加载出错 */}
