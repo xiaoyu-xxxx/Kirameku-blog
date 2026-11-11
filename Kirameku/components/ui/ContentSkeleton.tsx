@@ -2,6 +2,25 @@
 
 /** Shared content-area skeletons — nav/header stay interactive (SoT nav-nonblocking). */
 
+export function HomePageSkeleton() {
+  return (
+    <div className="w-full max-w-6xl mx-auto py-6 md:py-12 px-4 sm:px-10">
+      <div className="animate-pulse space-y-6">
+        <div className="h-8 w-48 max-w-[50%] rounded bg-slate-200/80 dark:bg-slate-600/60" />
+        <div className="h-4 w-72 max-w-[70%] rounded bg-slate-200/60 dark:bg-slate-600/40" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6 pt-2">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div
+              key={i}
+              className="h-32 rounded-2xl bg-white/40 dark:bg-slate-800/40 border border-white/15 dark:border-white/5"
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PostCardGridSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">

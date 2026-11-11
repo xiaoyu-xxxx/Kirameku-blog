@@ -12,7 +12,7 @@ import { photowallUrl } from "@/lib/cdn";
 import FadeIn from "@/components/ui/FadeIn";
 
 export default async function AboutPage() {
-  const fullPath = path.join(process.cwd(), "app", "about", "about.md");
+  const fullPath = path.join(process.cwd(), "app", "(site)", "about", "about.md");
   let contentHtml = "博主很懒，还没有写自我介绍哦...";
   let coverImage = photowallUrl("2.webp");
   let authorName = siteConfig.authorName;

@@ -18,6 +18,8 @@ import SeasonalEffect from "@/components/ui/SeasonalEffect";
 import KiraSparkle from "@/components/ui/KiraSparkle";
 import WelcomeScreen from "@/components/layout/WelcomeScreen";
 import VisitorTracker from "@/components/layout/VisitorTracker";
+import { NavigationPendingProvider } from "@/components/providers/NavigationPendingProvider";
+import { MainContentSlot } from "@/components/navigation/RouteFallback";
 import {
   fetchPublicSiteSettings,
   siteSettingString,
@@ -83,18 +85,20 @@ export default function RootLayout({
               <BackgroundProvider>
                 <MusicProvider>
                   <ToastProvider>
-                    <BackgroundRenderer />
-                    <VisitorTracker />
-                    <ClickEffect />
-                    <RadialMenu />
-                    <MouseTrail />
-                    <SeasonalEffect />
-                    <KiraSparkle />
-                    <Navbar />
-                    <main className="flex-1 pt-16">
-                      {children}
-                    </main>
-                    <ClientWidgets />
+                    <NavigationPendingProvider>
+                      <BackgroundRenderer />
+                      <VisitorTracker />
+                      <ClickEffect />
+                      <RadialMenu />
+                      <MouseTrail />
+                      <SeasonalEffect />
+                      <KiraSparkle />
+                      <Navbar />
+                      <main className="flex-1 pt-16">
+                        <MainContentSlot>{children}</MainContentSlot>
+                      </main>
+                      <ClientWidgets />
+                    </NavigationPendingProvider>
                   </ToastProvider>
                 </MusicProvider>
               </BackgroundProvider>

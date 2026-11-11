@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useNavigationPending } from "@/components/providers/NavigationPendingProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { useAppConfig } from "@/components/providers/AppConfigProvider";
@@ -45,6 +46,7 @@ const navLinks = [
 
 export default function Navbar() {
   const pathname = usePathname();
+  const { displayPath, beginNavigation } = useNavigationPending();
   const { theme, toggleTheme } = useTheme();
   const { siteSettings } = useAppConfig();
   const siteTitle = siteSettings.site_title || siteConfig.title;
@@ -200,7 +202,10 @@ export default function Navbar() {
             {/* Logo */}
             <Link
               href="/"
-              onClick={handleLogoClick}
+              onClick={() => {
+                beginNavigation("/");
+                handleLogoClick();
+              }}
               className={`flex items-center space-x-0.5 select-none ${easterEgg ? "animate-[spin_0.5s_ease-in-out_3]" : ""}`}
               style={easterEgg ? { animation: "spin 0.5s ease-in-out 6, rainbow 3s linear" } : undefined}
             >
@@ -219,11 +224,12 @@ export default function Navbar() {
             <div className="hidden md:flex items-center space-x-1">
               {navLinks.map((link) => {
                 const Icon = link.icon;
-                const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+                const isActive = link.href === "/" ? displayPath === "/" : displayPath.startsWith(link.href);
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
+                    onClick={() => beginNavigation(link.href)}
                     className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${isActive
                         ? "text-sky-600 dark:text-sky-400"
                         : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -310,12 +316,15 @@ export default function Navbar() {
             <div className="p-4 space-y-1">
               {navLinks.map((link) => {
                 const Icon = link.icon;
-                const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+                const isActive = link.href === "/" ? displayPath === "/" : displayPath.startsWith(link.href);
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
+                    onClick={() => {
+                      beginNavigation(link.href);
+                      setIsMobileMenuOpen(false);
+                    }}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
                         ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/50"
