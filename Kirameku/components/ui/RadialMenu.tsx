@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { useNavigationPending } from "@/components/providers/NavigationPendingProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home,
@@ -34,6 +35,7 @@ const navItems = [
 export default function RadialMenu() {
   const router = useRouter();
   const pathname = usePathname();
+  const { beginNavigation } = useNavigationPending();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [center, setCenter] = useState({ x: 0, y: 0 });
@@ -70,7 +72,9 @@ export default function RadialMenu() {
       if (e.key === "Tab") {
         e.preventDefault();
         if (activeIndex >= 0) {
-          router.push(navItems[activeIndex].href);
+          const href = navItems[activeIndex].href;
+          beginNavigation(href);
+          router.push(href);
         }
         setOpen(false);
         setActiveIndex(-1);
@@ -91,7 +95,7 @@ export default function RadialMenu() {
       window.removeEventListener("keyup", handleKeyUp, { capture: true });
       window.removeEventListener("mousemove", handleMouseMove);
     };
-  }, [open, activeIndex, getActiveIndex, router]);
+  }, [open, activeIndex, getActiveIndex, router, beginNavigation]);
 
   useEffect(() => {
     if (open && activeIndex >= 0) {
